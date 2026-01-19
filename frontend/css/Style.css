@@ -1,0 +1,140 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #f2f4f8;
+}
+
+.auth-box {
+    width: 300px;
+    margin: 100px auto;
+    background: white;
+    padding: 20px;
+    text-align: center;
+    border-radius: 8px;
+}
+
+.auth-box input {
+    width: 90%;
+    padding: 10px;
+    margin: 8px 0;
+}
+
+.auth-box button {
+    width: 100%;
+    padding: 10px;
+    background: #007bff;
+    color: white;
+    border: none;
+}
+
+header {
+    background: #007bff;
+    color: white;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.container {
+    padding: 20px;
+}
+
+.dashboard-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 30px;
+    margin: 30px auto;
+    max-width: 700px;
+}
+
+table {
+    width: 100%;
+    margin-top: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+table th {
+    background: #f7f7f7;
+    color: #333;
+    font-weight: 600;
+    border-bottom: 2px solid #eaeaea;
+}
+
+table th, table td {
+    padding: 14px 10px;
+    text-align: center;
+}
+
+table tr {
+    transition: background 0.2s;
+}
+table tr:hover {
+    background: #f2f4f8;
+}
+
+.upload-btn {
+    background: linear-gradient(90deg, #007bff 60%, #00c6ff 100%);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 600;
+    margin-bottom: 18px;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    transition: background 0.2s;
+}
+.upload-btn:hover {
+    background: linear-gradient(90deg, #0056b3 60%, #0096c7 100%);
+}
+
+.logout {
+    background: #ff4d4f;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    transition: background 0.2s;
+}
+.logout:hover {
+    background: #d9363e;
+}
+
+.file-action-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    margin: 0 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+.file-action-btn:hover {
+    background: #0056b3;
+}
+
+table {
+    width: 100%;
+    margin-top: 15px;
+    background: white;
+}
+
+table th, table td {
+    padding: 10px;
+    text-align: center;
+}
+
+.upload-btn {
+    background: green;
+    color: white;
+    padding: 10px;
+}
