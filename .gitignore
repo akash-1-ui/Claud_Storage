@@ -1,1 +1,2 @@
-backend/config/firebase-key.json
+echo "backend/config/firebase-key.json" >> .gitignore
+git add .gitignore
