@@ -14,20 +14,23 @@ document.addEventListener('DOMContentLoaded', function () {
 			const email = document.getElementById('email').value;
 			const password = document.getElementById('password').value;
 			try {
-				// Example: Send data to backend API
-				const response = await fetch('/api/register', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ username, email, password })
-				});
-				const result = await response.json();
-				if (response.ok && result.success) {
-					alert('Registration successful!');
-					localStorage.setItem('username', username); // Store username for dashboard
-					goTo('dashboard.html');
-				} else {
-					alert('Registration failed: ' + (result.message || 'Try again.'));
-				}
+               const response = await fetch("http://localhost:5000/api/auth/register", {
+                  method: "POST",
+                   headers: {
+                    "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify({ username, email, password })
+               });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                 alert("Registration successful");
+                  goTo("login.html");
+                } else {
+              alert(result.message || "Registration failed");
+                 }
+
 			} catch (err) {
 				alert('Registration failed: Server error.');
 			}
