@@ -7,7 +7,7 @@ const authRoutes = require("./routes/authRoutes");
 const fileRoutes = require("./routes/fileRoutes");
 
 const app = express();
-
+console.log("connectDB:", connectDB);
 connectDB();
 
 app.use(cors());
