@@ -1,38 +1,176 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Dashboard | Cloud Storage</title>
-    <link rel="stylesheet" href="css/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Storage Dashboard</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
+    <div class="dashboard">
 
-<header>
-    <h2>My Cloud Storage</h2>
-    <button class="logout">Logout</button>
-</header>
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">CloudBox</div>
+            <nav>
+                <ul>
+                    <li class="active">Dashboard</li>
+                    <li>My Files</li>
+                    <li>Shared with Me</li>
+                    <li>Starred</li>
+                    <li>Trash</li>
+                    <li class="upload-btn">+ Upload</li>
+                </ul>
+            </nav>
+        </aside>
 
+        <!-- Main Content -->
+        <main class="main-content">
 
-<div class="dashboard-card">
-    <input type="file">
-    <button class="upload-btn">Upload File</button>
+            <!-- Header -->
+            <header>
+                <div class="search-bar">
+                    <input type="text" placeholder="Search files...">
+                </div>
+                <div class="header-right">
+                    <button class="theme-toggle">🌙</button>
+                    <div class="profile">Akash</div>
+                    <div class="notifications">🔔</div>
+                </div>
+            </header>
 
-    <h3 style="margin-top:30px;">Your Files</h3>
+            <!-- Overview (Storage + Pie Chart) -->
+            <section class="overview">
+                <div class="overview-card">
+                    <!-- Storage Bar -->
+                    <div class="storage">
+                        <h2>Storage</h2>
+                        <p>Used: 1.2 GB of 5 GB</p>
+                        <div class="progress-bar">
+                            <div class="progress" style="width:24%;"></div>
+                        </div>
+                    </div>
 
-    <table>
-        <tr>
-            <th>File Name</th>
-            <th>Action</th>
-        </tr>
-        <tr>
-            <td>sample.pdf</td>
-            <td>
-                <button class="file-action-btn">Download</button>
-                <button class="file-action-btn">Delete</button>
-            </td>
-        </tr>
-    </table>
-</div>
+                    <!-- Small Pie Chart -->
+                    <div class="file-types-chart">
+                        <h2>File Types</h2>
+                        <canvas id="fileChart"></canvas>
+                    </div>
+                </div>
+            </section>
 
-<script src="css/js/app.js"></script>
+            <!-- File Table with Sort Options -->
+            <section class="files">
+                <div class="files-header">
+                    <h2>My Files</h2>
+                    <div class="sort-options">
+                        <label for="sort">Sort by:</label>
+                        <select id="sort">
+                            <option value="type">File Type</option>
+                            <option value="size">Size</option>
+                            <option value="date">Date Modified</option>
+                        </select>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Size</th>
+                            <th>Date Modified</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Project.zip</td>
+                            <td>ZIP</td>
+                            <td>2 MB</td>
+                            <td>21 Jan 2026</td>
+                            <td>
+                                <button>Download</button>
+                                <button>Share</button>
+                                <button>Delete</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Design.pdf</td>
+                            <td>PDF</td>
+                            <td>1 MB</td>
+                            <td>20 Jan 2026</td>
+                            <td>
+                                <button>Download</button>
+                                <button>Share</button>
+                                <button>Delete</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Image.png</td>
+                            <td>PNG</td>
+                            <td>500 KB</td>
+                            <td>19 Jan 2026</td>
+                            <td>
+                                <button>Download</button>
+                                <button>Share</button>
+                                <button>Delete</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+        </main>
+
+    </div>
+
+    <!-- Chart.js Script -->
+    <script>
+        const ctx = document.getElementById('fileChart').getContext('2d');
+        const fileChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: ['ZIP', 'PDF', 'PNG', 'Others'],
+                datasets: [{
+                    data: [1, 1, 1, 0],
+                    backgroundColor: ['#4f46e5','#10b981','#f59e0b','#ef4444'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            boxWidth: 12,
+                            padding: 15
+                        }
+                    }
+                },
+                maintainAspectRatio: false
+            }
+        });
+    </script>
+<script>
+  // 🔐 Block direct access
+  const token = localStorage.getItem("token");
+  if (!token) {
+    window.location.href = "login.html";
+  }
+
+  // 👤 Show username
+  const userName = localStorage.getItem("userName");
+  document.getElementById("username").innerText = userName;
+
+  // 🚪 Logout function
+  function logout() {
+    localStorage.clear();
+    window.location.href = "login.html";
+  }
+</script>
+
 </body>
 </html>
