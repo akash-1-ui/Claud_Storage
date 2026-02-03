@@ -4,6 +4,7 @@ const fileSchema = new mongoose.Schema({
   userId: String,
   fileName: String,
   fileURL: String,
+  fileSize: Number,
   permission: {
     type: String,
     default: "private"

@@ -14,7 +14,6 @@ body {
 /* Auth Box (Login Form) */
 .auth-box {
     width: 300px;
-    margin: 20px auto;
     background: white;
     padding: 20px;
     text-align: center;
