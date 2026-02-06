@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "start": "cd backend && npm start",
+    "dev": "cd backend/dashboard-react && npm run dev"
+  },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

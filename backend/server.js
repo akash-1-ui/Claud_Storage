@@ -19,7 +19,7 @@ app.use(express.static("../frontend"));
 app.use("/api/auth", authRoutes);
 app.use("/api/files", fileRoutes);
 
-const PORT = 5001;
+const PORT = process.env.PORT || 5002;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

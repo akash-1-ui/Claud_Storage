@@ -4,7 +4,7 @@ const serviceAccount = require("./firebase-key.json");
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    storageBucket: "your-project-id.appspot.com"
+    storageBucket: "cloudstorage-015.appspot.com"
 });
 
 const bucket = admin.storage().bucket();
