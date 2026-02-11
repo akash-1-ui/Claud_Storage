@@ -47,49 +47,60 @@ function Register() {
 
   return (
     <div className="auth-container">
+      <div className="auth-left auth-left-register">
+        <div className="auth-left-content">
+          <h1>Start Your Journey with 100% Free 
+          <span className="highlight">CloudBox</span></h1>
+        </div>
+      </div>
+
       <div className="auth-box">
-        <h2>Register</h2>
-        <form onSubmit={handleSubmit}>
-          <label htmlFor="register-username">Username</label>
-          <input
-            id="register-username"
-            type="text"
-            name="name"
-            autoComplete="username"
-            placeholder="Username"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <label htmlFor="register-email">Email</label>
-          <input
-            id="register-email"
-            type="email"
-            name="email"
-            autoComplete="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <label htmlFor="register-password">Password</label>
-          <input
-            id="register-password"
-            type="password"
-            name="password"
-            autoComplete="new-password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <button type="submit" disabled={loading}>
-            {loading ? "Registering..." : "Register"}
-          </button>
-        </form>
-        <p>
-          Already registered? <a href="#" onClick={() => navigate("/login")}>Login</a>
-        </p>
+        <div className="auth-form-wrapper">
+          <div className="form-header">
+            <h2>Sign Up</h2>
+          </div>
+          <form onSubmit={handleSubmit}>
+            <label htmlFor="register-username">Username</label>
+            <input
+              id="register-username"
+              type="text"
+              name="name"
+              autoComplete="username"
+              placeholder="Enter your username"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+            <label htmlFor="register-email">Email</label>
+            <input
+              id="register-email"
+              type="email"
+              name="email"
+              autoComplete="email"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <label htmlFor="register-password">Password</label>
+            <input
+              id="register-password"
+              type="password"
+              name="password"
+              autoComplete="new-password"
+              placeholder="Create a password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <button type="submit" disabled={loading}>
+              {loading ? "Registering..." : "Sign Up"}
+            </button>
+          </form>
+          <p>
+            Already Signed up? <a href="#" onClick={() => navigate("/login")}>Sign in here</a>
+          </p>
+        </div>
       </div>
     </div>
   );

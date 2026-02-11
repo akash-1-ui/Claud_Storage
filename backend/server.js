@@ -5,6 +5,7 @@ require("dotenv").config();
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const fileRoutes = require("./routes/fileRoutes");
+const contactRoutes = require("./routes/contactRoutes");
 
 const app = express();
 console.log("connectDB:", connectDB);
@@ -18,6 +19,7 @@ app.use(express.static("../frontend"));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/files", fileRoutes);
+app.use("/api/contact", contactRoutes);
 
 const PORT = process.env.PORT || 5002;
 

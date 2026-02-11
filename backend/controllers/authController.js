@@ -108,6 +108,17 @@ exports.getProfile = async (req, res) => {
       });
     }
 
+    // Recalculate storage used from files to ensure accuracy
+    const File = require("../models/File");
+    const userFiles = await File.find({ userId: req.userId });
+    const calculatedStorageUsed = userFiles.reduce((total, file) => total + (file.fileSize || 0), 0);
+
+    // Update user's storageUsed if it doesn't match
+    if (user.storageUsed !== calculatedStorageUsed) {
+      user.storageUsed = calculatedStorageUsed;
+      await user.save();
+    }
+
     res.json({
       success: true,
       user: {

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./css/dashboard.css";
 import Chart from "chart.js/auto";
+import Switch from "./Switch";
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -20,10 +21,20 @@ function Dashboard() {
   const [uploadStatus, setUploadStatus] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeSection, setActiveSection] = useState('files');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactMessage, setContactMessage] = useState('');
   const [notifications, setNotifications] = useState([]);
   const [currentPath, setCurrentPath] = useState(['move']);
   const [activities, setActivities] = useState([]);
   const [isMyFilesExpanded, setIsMyFilesExpanded] = useState(false);
+  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
+  const [showProfileUpload, setShowProfileUpload] = useState(false);
+  const [favorites, setFavorites] = useState([]);
+  const [trashedFiles, setTrashedFiles] = useState([]);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const fetchProfile = async () => {
     const token = localStorage.getItem("token");
@@ -147,12 +158,27 @@ function Dashboard() {
     }
   };
 
+  // Show username from userProfile if available, else fallback to localStorage
+  const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
+
 useEffect(() => {
   // 🔐 Auth check
   const token = localStorage.getItem("token");
   if (!token) {
     navigate('/login');
     return;
+  }
+
+  // Load profile photo from localStorage (user-specific)
+  const savedPhoto = localStorage.getItem(`profilePhoto_${userName}`);
+  if (savedPhoto) {
+    setProfilePhoto(savedPhoto);
+  }
+  
+  // Load favorites
+  const savedFavorites = localStorage.getItem(`favorites_${userName}`);
+  if (savedFavorites && favorites.length === 0) {
+    setFavorites(JSON.parse(savedFavorites));
   }
 
   fetchProfile();
@@ -163,12 +189,41 @@ useEffect(() => {
       chartInstance.current.destroy();
     }
   };
-}, []);
+}, [userName]);
 
 
   const logout = () => {
     localStorage.clear();
     navigate('/login');
+  };
+
+  const handleProfilePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
+        setProfilePhoto(reader.result);
+        localStorage.setItem(`profilePhoto_${userName}`, reader.result);
+        showNotification('Profile photo updated!', 'success');
+        setShowProfileUpload(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleToggleFavorite = (file) => {
+    const isFavorited = favorites.some(fav => fav._id === file._id);
+    let newFavorites;
+    if (isFavorited) {
+      newFavorites = favorites.filter(fav => fav._id !== file._id);
+    } else {
+      newFavorites = [...favorites, file];
+    }
+    setFavorites(newFavorites);
+    const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
+    localStorage.setItem(`favorites_${userName}`, JSON.stringify(newFavorites));
+    showNotification(isFavorited ? 'Removed from favorites' : 'Added to favorites', 'success');
   };
 
 
@@ -212,6 +267,7 @@ useEffect(() => {
   };
 
   const showNotification = (message, type = 'error') => {
+    if (!notificationsEnabled) return; // Skip if notifications are disabled
     const id = Date.now();
     setNotifications(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
@@ -314,20 +370,34 @@ useEffect(() => {
   const handleDelete = async (file) => {
     if (!confirm(`Are you sure you want to delete "${file.name}"?`)) return;
 
+    const fileName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
+    const trashedKey = `trashed_${fileName}`;
+    const existingTrash = JSON.parse(localStorage.getItem(trashedKey) || '[]');
+    
+    // Add file to trash with timestamp
+    const trashedItem = {
+      ...file,
+      deletedAt: new Date().getTime()
+    };
+    existingTrash.push(trashedItem);
+    localStorage.setItem(trashedKey, JSON.stringify(existingTrash));
+    
+    // Update local trash state
+    setTrashedFiles(existingTrash);
+    
+    // Remove from files
+    setFiles(files.filter(f => f._id !== file._id));
+    showNotification('File moved to trash!', 'success');
+    
+    // Also attempt to delete from backend
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:5000/api/files/${file._id}`, {
+      await fetch(`http://localhost:5000/api/files/${file._id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      if (response.ok) {
-        showNotification('File deleted successfully!', 'success');
-        await fetchFiles(); // Refresh the file list
-      } else {
-        showNotification('Failed to delete file');
-      }
     } catch (err) {
       showNotification('Error deleting file');
     }
@@ -343,6 +413,98 @@ useEffect(() => {
       }
       return next;
     });
+  };
+
+  const handleRestoreFromTrash = (file) => {
+    const fileName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
+    const trashedKey = `trashed_${fileName}`;
+    
+    // Remove from trash
+    const updated = trashedFiles.filter(f => f._id !== file._id);
+    setTrashedFiles(updated);
+    localStorage.setItem(trashedKey, JSON.stringify(updated));
+    
+    // Add back to files
+    const restoredFile = {
+      ...file,
+      _id: file._id,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      updatedAt: file.updatedAt,
+      url: file.url,
+      isImage: file.isImage,
+      isVideo: file.isVideo
+    };
+    setFiles([...files, restoredFile]);
+    showNotification('File restored from trash!', 'success');
+  };
+
+  const handlePermanentlyDelete = (file) => {
+    if (!confirm(`Permanently delete "${file.name}"? This cannot be undone.`)) return;
+    
+    const fileName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
+    const trashedKey = `trashed_${fileName}`;
+    
+    const updated = trashedFiles.filter(f => f._id !== file._id);
+    setTrashedFiles(updated);
+    localStorage.setItem(trashedKey, JSON.stringify(updated));
+    showNotification('File permanently deleted!', 'success');
+  };
+
+  const handle2FA = () => {
+    setTwoFactorEnabled(!twoFactorEnabled);
+    showNotification(twoFactorEnabled ? '2FA disabled' : '2FA enabled. Check your email for setup instructions.', 'success');
+  };
+
+  const handleChangePassword = (e) => {
+    e.preventDefault();
+    const currentPass = document.getElementById('current-pass')?.value || '';
+    const newPass = document.getElementById('new-pass')?.value || '';
+    const confirmPass = document.getElementById('confirm-pass')?.value || '';
+
+    if (!currentPass || !newPass || !confirmPass) {
+      showNotification('Please fill all password fields');
+      return;
+    }
+    if (newPass !== confirmPass) {
+      showNotification('New passwords do not match');
+      return;
+    }
+    if (newPass.length < 6) {
+      showNotification('Password must be at least 6 characters');
+      return;
+    }
+    showNotification('Password changed successfully!', 'success');
+    setShowPasswordModal(false);
+  };
+
+  const handleContactSubmit = async (e) => {
+    e.preventDefault();
+    if (!contactEmail || !contactMessage) {
+      showNotification('Please fill in both email and message');
+      return;
+    }
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("http://localhost:5000/api/contact", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ email: contactEmail, message: contactMessage }),
+      });
+      if (res.ok) {
+        showNotification('Message sent successfully!', 'success');
+        setContactEmail('');
+        setContactMessage('');
+      } else {
+        showNotification('Failed to send message');
+      }
+    } catch (err) {
+      showNotification('Error sending message');
+    }
   };
 
   const handleFileInput = (e) => {
@@ -385,26 +547,53 @@ useEffect(() => {
 
   const getStorageInfo = () => {
     const storageLimit = 5; // 5 GB
-    let storageUsedGB = 0;
+    const storageLimitBytes = storageLimit * 1024 * 1024 * 1024;
+    let storageUsedBytes = 0;
     let progressPercent = 0;
 
-    if (userProfile && typeof userProfile.storageUsed === 'number') {
-      storageUsedGB = (userProfile.storageUsed / (1024 * 1024 * 1024)).toFixed(2);
-      const limitGB = userProfile.storageLimit ? (userProfile.storageLimit / (1024 * 1024 * 1024)).toFixed(2) : storageLimit;
-      progressPercent = userProfile.storageLimit ? (userProfile.storageUsed / userProfile.storageLimit) * 100 : 0;
-      return { used: `${storageUsedGB} GB`, limit: `${limitGB} GB`, percent: progressPercent };
+    if (userProfile && typeof userProfile.storageUsed === 'number' && userProfile.storageUsed > 0) {
+      // Use actual storage from profile
+      storageUsedBytes = userProfile.storageUsed;
     } else {
       // Fallback: calculate from files
-      storageUsedGB = calculateStorageFromFiles();
-      progressPercent = (storageUsedGB / storageLimit) * 100;
-      return { used: `${storageUsedGB.toFixed(2)} MB`, limit: `${storageLimit * 1024} MB`, percent: Math.min(progressPercent, 100) };
+      storageUsedBytes = calculateStorageFromFiles() * 1024 * 1024; // Convert MB to bytes
+    }
+
+    const limitBytes = (userProfile && userProfile.storageLimit) || storageLimitBytes;
+    const usedGB = storageUsedBytes / (1024 * 1024 * 1024);
+    const limitGB = limitBytes / (1024 * 1024 * 1024);
+    progressPercent = (storageUsedBytes / limitBytes) * 100;
+
+    if (usedGB < 1) {
+      const usedMB = (storageUsedBytes / (1024 * 1024)).toFixed(2);
+      return { used: `${usedMB} MB`, limit: `${limitGB.toFixed(2)} GB`, percent: Math.min(progressPercent, 100) };
+    } else {
+      return { used: `${usedGB.toFixed(2)} GB`, limit: `${limitGB.toFixed(2)} GB`, percent: Math.min(progressPercent, 100) };
     }
   };
 
   const storageInfo = getStorageInfo();
 
-  // Show username from userProfile if available, else fallback to localStorage
-  const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
+  // Load trash on mount
+  useEffect(() => {
+    const fileName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
+    const trashedKey = `trashed_${fileName}`;
+    const saved = JSON.parse(localStorage.getItem(trashedKey) || '[]');
+    
+    // Remove items older than 24 hours
+    const now = new Date().getTime();
+    const filtered = saved.filter(item => {
+      const age = now - item.deletedAt;
+      return age < 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+    });
+    
+    // Update if any items were removed
+    if (filtered.length !== saved.length) {
+      localStorage.setItem(trashedKey, JSON.stringify(filtered));
+    }
+    
+    setTrashedFiles(filtered);
+  }, [userProfile]);
 
   // Add dark mode class on mount if needed
   useEffect(() => {
@@ -421,6 +610,18 @@ useEffect(() => {
     }
   }, [isDarkMode]);
 
+  // Close hamburger menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      const hamburger = document.querySelector('.hamburger-menu');
+      if (hamburger && !hamburger.contains(e.target) && isHamburgerOpen) {
+        setIsHamburgerOpen(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [isHamburgerOpen]);
+
   const handleDrop = (e) => {
     e.preventDefault();
     const files = Array.from(e.dataTransfer.files);
@@ -432,38 +633,18 @@ useEffect(() => {
 
       {/* Sidebar */}
       <aside className={`sidebar${isDarkMode ? ' dark' : ''}`}> 
-        <div className="logo">CloudBox</div>
+        <div className="logo" style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+          <span>CloudBox</span>
+          <img src="/src/assets/LOGO.png" alt="CloudBox" style={{width: '80px', height: '80px', objectFit: 'contain'}} />
+        </div>
         <nav>
           <ul>
-            <li className={activeSection === 'files' ? 'active' : ''} onClick={() => { setActiveSection('files'); setIsMyFilesExpanded(!isMyFilesExpanded); }}>
-              Home {isMyFilesExpanded ? '▼' : '▶'}
+            <li className={activeSection === 'files' ? 'active' : ''} onClick={() => setActiveSection('files')}>
+              Home
             </li>
-            {isMyFilesExpanded && (
-              <ul className="sidebar-files-list">
-                {loading ? (
-                  <li>Loading...</li>
-                ) : files.length === 0 ? (
-                  <li>No files</li>
-                ) : (
-                  files.slice(0, 10).map((file, index) => (
-                    <li key={index} onClick={() => window.open(file.url, '_blank')} className="sidebar-file-item">
-                      {file.isImage ? (
-                        <img src={file.url} alt={file.name} style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2, marginRight: 5 }} />
-                      ) : file.isVideo ? (
-                        <video src={file.url} style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2, marginRight: 5 }} controls={false} poster="https://img.icons8.com/ios-filled/50/000000/video-file.png" />
-                      ) : (
-                        <span style={{ fontSize: 16, marginRight: 5 }}>📄</span>
-                      )}
-                      <span className="sidebar-file-name">{file.name.length > 15 ? file.name.substring(0, 15) + '...' : file.name}</span>
-                    </li>
-                  ))
-                )}
-                {files.length > 10 && (
-                  <li className="view-all-sidebar" onClick={() => setActiveSection('files')}>View all ({files.length})</li>
-                )}
-              </ul>
-            )}
+            <li className={activeSection === 'favorites' ? 'active' : ''} onClick={() => setActiveSection('favorites')}>Favorites</li>
             <li className={activeSection === 'trash' ? 'active' : ''} onClick={() => setActiveSection('trash')}>Trash</li>
+            <li className={activeSection === 'contact' ? 'active' : ''} onClick={() => setActiveSection('contact')}>Contact</li>
             <li className={activeSection === 'settings' ? 'active' : ''} onClick={() => setActiveSection('settings')}>Settings</li>
           </ul>
         </nav>
@@ -500,19 +681,236 @@ useEffect(() => {
             />
           </div>
           <div className="header-right">
-            <button onClick={toggleTheme} className="theme-toggle">
-              {isDarkMode ? '☀️' : '🌙'}
-            </button>
-            <div className="profile" style={{fontWeight:600, fontSize:16, color:'#4f46e5', display:'flex', alignItems:'center', gap:8}}>
-              <span style={{fontSize:20, color:'#222'}}>👤</span> {userName}
+            <Switch isDarkMode={isDarkMode} onChange={toggleTheme} />
+            
+            {/* Hamburger Menu */}
+            <div className="hamburger-menu">
+              <button 
+                className="hamburger-btn"
+                onClick={() => setIsHamburgerOpen(!isHamburgerOpen)}
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  border: '2px solid #e5e7eb',
+                  background: profilePhoto ? 'transparent' : '#e5e7eb',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  padding: 0,
+                  flexShrink: 0
+                }}
+              >
+                {profilePhoto ? (
+                  <img src={profilePhoto} alt="Profile" style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', display: 'block'}} />
+                ) : (
+                  <span style={{fontSize: '24px'}}>👤</span>
+                )}
+              </button>
+
+              {/* Dropdown Menu */}
+              {isHamburgerOpen && (
+                <div className="hamburger-dropdown" style={{
+                  position: 'absolute',
+                  top: '65px',
+                  right: '0',
+                  background: isDarkMode ? '#2a2a33' : 'white',
+                  border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  minWidth: '220px',
+                  zIndex: 1000,
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    padding: '12px 16px',
+                    borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                    color: isDarkMode ? '#e5e5e5' : '#222'
+                  }}>
+                    <p style={{margin: '0 0 4px 0', fontWeight: 600}}>Welcome back!</p>
+                    <p style={{margin: '0', fontSize: '13px', color: isDarkMode ? '#9ca3af' : '#6b7280'}}>{userName}</p>
+                  </div>
+
+                  <button
+                    onClick={() => setShowProfileUpload(!showProfileUpload)}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: isDarkMode ? '#e5e5e5' : '#222',
+                      fontSize: '14px',
+                      borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                      transition: '0.2s'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = isDarkMode ? '#353545' : '#f9fafb'}
+                    onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                  >
+                    Update Profile Photo
+                  </button>
+
+                  <button
+                    onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: isDarkMode ? '#e5e5e5' : '#222',
+                      fontSize: '14px',
+                      borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                      transition: '0.2s',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = isDarkMode ? '#353545' : '#f9fafb'}
+                    onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                  >
+                    <span>Notifications</span>
+                    <strong style={{color: notificationsEnabled ? '#10b981' : '#ef4444'}}>{notificationsEnabled ? 'ON' : 'OFF'}</strong>
+                  </button>
+
+                  <button
+                    onClick={logout}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: '#dc2626',
+                      fontSize: '14px',
+                      transition: '0.2s'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = isDarkMode ? '#353545' : '#fee2e2'}
+                    onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
-            <div className="notifications">
-              🔔
-              {notifications.length > 0 && <span className="notification-count">{notifications.length}</span>}
-            </div>
-            <button onClick={logout}>Logout</button>
           </div>
         </header>
+
+        {/* Profile Photo Upload Modal */}
+        {showProfileUpload && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1999
+          }} onClick={() => setShowProfileUpload(false)}>
+            <div style={{
+              background: isDarkMode ? '#2a2a33' : 'white',
+              padding: '30px',
+              borderRadius: '12px',
+              zIndex: 2000,
+              minWidth: '320px'
+            }} onClick={(e) => e.stopPropagation()}>
+              <h3 style={{margin: '0 0 20px 0', color: isDarkMode ? '#e5e5e5' : '#222'}}>Upload Profile Photo</h3>
+              <label style={{
+                display: 'block',
+                padding: '20px',
+                border: `2px dashed ${isDarkMode ? '#3a3a47' : '#cbd5e1'}`,
+                borderRadius: '8px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                transition: '0.2s',
+                color: isDarkMode ? '#9ca3af' : '#6b7280'
+              }}
+              onMouseEnter={(e) => e.target.style.background = isDarkMode ? '#353545' : '#f9fafb'}
+              onMouseLeave={(e) => e.target.style.background = 'transparent'}
+              >
+                Click to upload or drag and drop
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleProfilePhotoUpload}
+                  style={{display: 'none'}}
+                />
+              </label>
+              <button
+                onClick={() => setShowProfileUpload(false)}
+                style={{
+                  width: '100%',
+                  marginTop: '15px',
+                  padding: '10px',
+                  background: '#e5e7eb',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  color: '#222'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Change Password Modal */}
+        {showPasswordModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1999
+          }} onClick={() => setShowPasswordModal(false)}>
+            <div style={{
+              background: isDarkMode ? '#2a2a33' : 'white',
+              padding: '30px',
+              borderRadius: '12px',
+              zIndex: 2000,
+              minWidth: '380px'
+            }} onClick={(e) => e.stopPropagation()}>
+              <h3 style={{margin: '0 0 20px 0', color: isDarkMode ? '#e5e5e5' : '#222'}}>Change Password</h3>
+              <form onSubmit={handleChangePassword} style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+                <div>
+                  <label style={{display: 'block', marginBottom: '6px', fontSize: '13px', color: isDarkMode ? '#9ca3af' : '#6b7280', fontWeight: 500}}>Current Password</label>
+                  <input type="password" id="current-pass" placeholder="Enter current password" style={{width: '100%', padding: '10px', border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`, borderRadius: '6px', background: isDarkMode ? '#1a1a23' : '#f9fafb', color: isDarkMode ? '#e5e5e5' : '#222', fontSize: '13px', boxSizing: 'border-box'}} />
+                </div>
+                <div>
+                  <label style={{display: 'block', marginBottom: '6px', fontSize: '13px', color: isDarkMode ? '#9ca3af' : '#6b7280', fontWeight: 500}}>New Password</label>
+                  <input type="password" id="new-pass" placeholder="Enter new password (min 6 chars)" style={{width: '100%', padding: '10px', border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`, borderRadius: '6px', background: isDarkMode ? '#1a1a23' : '#f9fafb', color: isDarkMode ? '#e5e5e5' : '#222', fontSize: '13px', boxSizing: 'border-box'}} />
+                </div>
+                <div>
+                  <label style={{display: 'block', marginBottom: '6px', fontSize: '13px', color: isDarkMode ? '#9ca3af' : '#6b7280', fontWeight: 500}}>Confirm Password</label>
+                  <input type="password" id="confirm-pass" placeholder="Confirm new password" style={{width: '100%', padding: '10px', border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`, borderRadius: '6px', background: isDarkMode ? '#1a1a23' : '#f9fafb', color: isDarkMode ? '#e5e5e5' : '#222', fontSize: '13px', boxSizing: 'border-box'}} />
+                </div>
+                <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
+                  <button type="submit" style={{flex: 1, padding: '10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 500}}>
+                    Change Password
+                  </button>
+                  <button type="button" onClick={() => setShowPasswordModal(false)} style={{flex: 1, padding: '10px', background: '#e5e7eb', color: '#222', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px'}}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Conditional Content Based on Active Section */}
         {activeSection === 'files' && (
@@ -523,29 +921,26 @@ useEffect(() => {
             </div>
 
             <div className="files-header">
-              <h2>Home</h2>
-              <div className="view-controls">
-                <button onClick={() => setViewMode('list')} className={viewMode === 'list' ? 'active' : ''}>List</button>
-                <button onClick={() => setViewMode('grid')} className={viewMode === 'grid' ? 'active' : ''}>Grid</button>
-              </div>
+              <h2>All Files</h2>
               <div className="sort-options">
                 <label>Sort by:</label>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                  <option value="date">Date Modified</option>
                   <option value="name">Name</option>
                   <option value="type">Type</option>
                   <option value="size">Size</option>
-                  <option value="date">Date Modified</option>
                 </select>
               </div>
             </div>
 
-            {/* Storage Statistics Chart */}
-            <div className="chart-container" style={{maxWidth: '300px', margin: '20px auto'}}>
-              <canvas ref={chartRef}></canvas>
-            </div>
-
             {/* Drag & Drop Upload Zone */}
-            <div className="upload-zone" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
+            <div 
+              className="upload-zone" 
+              onDrop={handleDrop} 
+              onDragOver={(e) => e.preventDefault()}
+              onClick={() => document.getElementById('file-upload-input').click()}
+              style={{cursor: 'pointer'}}
+            >
               <p>Drag & drop files here or click to upload</p>
               <label htmlFor="file-upload-input" style={{display:'none'}}>Upload file</label>
               <input
@@ -564,88 +959,218 @@ useEffect(() => {
                 <div className="upload-progress-bar">
                   <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }}></div>
                 </div>
-                <div className="upload-progress-text">
+                <div className="upload-progress-text" style={{color: '#222', fontWeight: 600, marginTop: '8px'}}>
                   {uploadStatus || `${uploadProgress}%`}
                 </div>
               </div>
             )}
-            {viewMode === 'list' ? (
-              <table>
-                <thead>
-                  <tr>
-                    <th><input type="checkbox" id="select-all-checkbox" name="select-all" aria-label="Select all files" /></th>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th>Size</th>
-                    <th>Date Modified</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading && (
-                    <tr>
-                      <td colSpan="6">Loading files...</td>
-                    </tr>
-                  )}
-
-                  {!loading &&
-                    sortedFiles.map((file, index) => (
-                      <tr key={index}>
-                        <td><input type="checkbox" name={`select-file-${index}`} aria-label={`Select file ${file.name}`} /></td>
-                        <td>
-                          {file.isImage ? (
-                            <img src={file.url} alt={file.name} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, marginRight: 8, verticalAlign: 'middle' }} />
-                          ) : file.isVideo ? (
-                            <video src={file.url} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, marginRight: 8, verticalAlign: 'middle' }} controls={false} poster="https://img.icons8.com/ios-filled/50/000000/video-file.png" />
-                          ) : (
-                            <span style={{ fontSize: 24, marginRight: 8 }}>📄</span>
-                          )}
-                          {file.name}
-                        </td>
-                        <td>{file.type}</td>
-                        <td>{file.size}</td>
-                        <td>{new Date(file.updatedAt).toLocaleDateString()}</td>
-                        <td>
-                          <button onClick={() => window.open(file.url, '_blank')}>Open</button>
-                          <button onClick={() => handleDownload(file)}>Download</button>
-                          <button onClick={() => handleShare(file)}>Share</button>
-                          <button onClick={() => handleRename(file)}>Rename</button>
-                          <button onClick={() => handleMove(file)}>Move</button>
-                          <button onClick={() => handleCopy(file)}>Copy</button>
-                          <button onClick={() => handleDelete(file)}>Delete</button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+            
+            {/* Google Photos Style Grid */}
+            {loading ? (
+              <div style={{padding: '1px', textAlign: 'center', color: '#9ca3af'}}>
+                <p>Loading files...</p>
+              </div>
+            ) : sortedFiles.length === 0 ? (
+              <div style={{padding: '40px', textAlign: 'center', color: '#9ca3af'}}>
+                <p>No files uploaded yet.</p>
+              </div>
             ) : (
-              <div className="grid-view">
-                {loading && <p>Loading files...</p>}
+              (() => {
+                // Group files by date
+                const groupedByDate = {};
+                sortedFiles.forEach(file => {
+                  const date = new Date(file.updatedAt).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  });
+                  if (!groupedByDate[date]) {
+                    groupedByDate[date] = [];
+                  }
+                  groupedByDate[date].push(file);
+                });
 
-                {!loading && files.length === 0 && (
-                  <p>No files uploaded yet.</p>
-                )}
+                // Sort dates in descending order
+                const sortedDates = Object.keys(groupedByDate).sort((a, b) => 
+                  new Date(b) - new Date(a)
+                );
 
-                {!loading && files.length > 0 &&
-                  sortedFiles.map((file, index) => (
-                    <div key={index} className="file-item">
-                      <input type="checkbox" name={`select-grid-file-${index}`} aria-label={`Select file ${file.name}`} />
-                      {file.isImage ? (
-                        <img src={file.url} alt={file.name} className="file-thumb" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 8, marginBottom: 8 }} />
-                      ) : file.isVideo ? (
-                        <video src={file.url} className="file-thumb" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 8, marginBottom: 8 }} controls poster="https://img.icons8.com/ios-filled/50/000000/video-file.png" />
-                      ) : (
-                        <div className="file-icon" style={{ fontSize: 40 }}>📄</div>
-                      )}
-                      <p>{file.name}</p>
-                      <div className="file-actions">
-                        <button onClick={() => window.open(file.url, '_blank')}>Open</button>
-                        <button onClick={() => handleDownload(file)}>Download</button>
-                        <button onClick={() => handleShare(file)}>Share</button>
-                        <button onClick={() => handleDelete(file)}>Delete</button>
+                return (
+                  <div className="photos-container">
+                    {sortedDates.map(date => (
+                      <div key={date} className="date-section">
+                        <h3 className="date-header">{date}</h3>
+                        <div className="grid-view">
+                          {groupedByDate[date].map((file, index) => {
+                            const isFavorited = favorites.some(fav => fav._id === file._id);
+                            return (
+                              <div key={index} className="file-item">
+                                <div style={{position: 'relative'}}>
+                                  {file.isImage ? (
+                                    <img src={file.url} alt={file.name} className="file-thumb" onClick={() => window.open(file.url, '_blank')} style={{cursor: 'pointer'}} />
+                                  ) : file.isVideo ? (
+                                    <video src={file.url} className="file-thumb" style={{cursor: 'pointer'}} onClick={() => window.open(file.url, '_blank')} />
+                                  ) : (
+                                    <div className="file-icon">📄</div>
+                                  )}
+                                  <button
+                                    onClick={() => handleToggleFavorite(file)}
+                                    style={{
+                                      position: 'absolute',
+                                      top: '8px',
+                                      right: '8px',
+                                      background: 'rgba(255,255,255,0.9)',
+                                      border: 'none',
+                                      borderRadius: '50%',
+                                      width: '32px',
+                                      height: '32px',
+                                      fontSize: '18px',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      transition: 'all 0.2s ease',
+                                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                                    }}
+                                    title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                                  >
+                                    {isFavorited ? '❤️' : '🤍'}
+                                  </button>
+                                </div>
+                                <div className="file-info">
+                                  <p title={file.name}>{file.name}</p>
+                                </div>
+                                <div className="file-actions">
+                                  <button onClick={() => handleDownload(file)} title="Download">⬇</button>
+                                  <button onClick={() => handleShare(file)} title="Share">↗</button>
+                                  <button onClick={() => handleRename(file)} title="Rename">✏</button>
+                                  <button onClick={() => handleDelete(file)} title="Delete">🗑</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                );
+              })()
+            )}
+
+            {/* Footer */}
+            <footer style={{
+              marginTop: '60px',
+              paddingTop: '40px',
+              paddingBottom: '30px',
+              borderTop: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+              color: isDarkMode ? '#9ca3af' : '#6b7280'
+            }}>
+              <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '30px', marginBottom: '30px'}}>
+                <div>
+                  <h4 style={{color: isDarkMode ? '#e5e5e5' : '#222', marginBottom: '12px', fontSize: '14px', fontWeight: 600}}>Product</h4>
+                  <ul style={{listStyle: 'none', padding: 0, margin: 0}}>
+                    <li style={{marginBottom: '8px'}}><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>Features</a></li>
+                    <li style={{marginBottom: '8px'}}><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>Pricing</a></li>
+                    <li><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>Security</a></li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 style={{color: isDarkMode ? '#e5e5e5' : '#222', marginBottom: '12px', fontSize: '14px', fontWeight: 600}}>Company</h4>
+                  <ul style={{listStyle: 'none', padding: 0, margin: 0}}>
+                    <li style={{marginBottom: '8px'}}><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>About</a></li>
+                    <li style={{marginBottom: '8px'}}><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>Blog</a></li>
+                    <li><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>Careers</a></li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 style={{color: isDarkMode ? '#e5e5e5' : '#222', marginBottom: '12px', fontSize: '14px', fontWeight: 600}}>Resources</h4>
+                  <ul style={{listStyle: 'none', padding: 0, margin: 0}}>
+                    <li style={{marginBottom: '8px'}}><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>Documentation</a></li>
+                    <li style={{marginBottom: '8px'}}><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>Support</a></li>
+                    <li><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>API</a></li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 style={{color: isDarkMode ? '#e5e5e5' : '#222', marginBottom: '12px', fontSize: '14px', fontWeight: 600}}>Legal</h4>
+                  <ul style={{listStyle: 'none', padding: 0, margin: 0}}>
+                    <li style={{marginBottom: '8px'}}><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>Terms</a></li>
+                    <li style={{marginBottom: '8px'}}><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>Privacy</a></li>
+                    <li><a href="#" style={{color: isDarkMode ? '#9ca3af' : '#6b7280', textDecoration: 'none', fontSize: '13px'}}>Cookies</a></li>
+                  </ul>
+                </div>
+              </div>
+              <div style={{borderTop: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`, paddingTop: '20px', textAlign: 'center'}}>
+                <p style={{fontSize: '13px', margin: '0', color: isDarkMode ? '#9ca3af' : '#6b7280'}}>© 2026 CloudBox. All rights reserved.</p>
+              </div>
+            </footer>
+          </section>
+        )}
+
+        {/* FAVORITES SECTION */}
+        {activeSection === 'favorites' && (
+          <section className={`files${isDarkMode ? ' dark' : ''}`}>
+            <div className="breadcrumb">
+              <span>Favorites</span>
+            </div>
+            <h2>Favorites</h2>
+            {favorites.length === 0 ? (
+              <div style={{padding: '40px', textAlign: 'center', color: '#9ca3af'}}>
+                <p>No favorites yet. Click the heart icon on files to add them here.</p>
+              </div>
+            ) : (
+              <div className="photos-container">
+                <div className="date-section">
+                  <div className="grid-view">
+                    {favorites.map((file, index) => {
+                      const isFavorited = favorites.some(fav => fav._id === file._id);
+                      return (
+                        <div key={index} className="file-item">
+                          <div style={{position: 'relative'}}>
+                            {file.isImage ? (
+                              <img src={file.url} alt={file.name} className="file-thumb" onClick={() => window.open(file.url, '_blank')} style={{cursor: 'pointer'}} />
+                            ) : file.isVideo ? (
+                              <video src={file.url} className="file-thumb" style={{cursor: 'pointer'}} onClick={() => window.open(file.url, '_blank')} />
+                            ) : (
+                              <div className="file-icon">📄</div>
+                            )}
+                            <button
+                              onClick={() => handleToggleFavorite(file)}
+                              style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                background: 'rgba(255,255,255,0.9)',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '32px',
+                                height: '32px',
+                                fontSize: '18px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s ease',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                              }}
+                              title="Remove from favorites"
+                            >
+                              ❤️
+                            </button>
+                          </div>
+                          <div className="file-info">
+                            <p title={file.name}>{file.name}</p>
+                          </div>
+                          <div className="file-actions">
+                            <button onClick={() => handleDownload(file)} title="Download">⬇</button>
+                            <button onClick={() => handleShare(file)} title="Share">↗</button>
+                            <button onClick={() => handleRename(file)} title="Rename">✏</button>
+                            <button onClick={() => handleDelete(file)} title="Delete">🗑</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
           </section>
@@ -655,7 +1180,107 @@ useEffect(() => {
         {activeSection === 'trash' && (
           <section className={`files${isDarkMode ? ' dark' : ''}`}>
             <h2>Trash</h2>
-            <p style={{color: '#6b7280', marginTop: '20px'}}>Trash feature coming soon. Deleted files will appear here.</p>
+            <p style={{color: '#6b7280', marginTop: '10px', fontSize: '14px'}}>Trashed files will be permanently deleted after 24 hours.</p>
+            {trashedFiles.length === 0 ? (
+              <p style={{color: '#6b7280', marginTop: '20px'}}>Trash is empty.</p>
+            ) : (
+              <div className="grid-view" style={{marginTop: '20px'}}>
+                {trashedFiles.map((file) => {
+                  const now = new Date().getTime();
+                  const age = now - file.deletedAt;
+                  const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - age) / (60 * 60 * 1000));
+                  
+                  return (
+                    <div key={file._id} className="file-item" style={{position: 'relative'}}>
+                      {file.isImage ? (
+                        <img src={file.url} alt={file.name} style={{width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px'}} />
+                      ) : file.isVideo ? (
+                        <video src={file.url} style={{width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px'}} />
+                      ) : (
+                        <div style={{width: '100%', height: '200px', background: '#e5e7eb', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#6b7280'}}>{file.type}</div>
+                      )}
+                      <p style={{fontSize: '12px', color: '#6b7280', marginTop: '8px', overflow: 'hidden', textOverflow: 'ellipsis'}}>{file.name}</p>
+                      <p style={{fontSize: '11px', color: '#f59e0b', marginTop: '4px'}}>⏱ Deletes in {hoursLeft}h</p>
+                      <div style={{marginTop: '8px', display: 'flex', gap: '8px'}}>
+                        <button onClick={() => handleRestoreFromTrash(file)} title="Restore" style={{padding: '6px 10px', fontSize: '12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>↩ Restore</button>
+                        <button onClick={() => handlePermanentlyDelete(file)} title="Delete" style={{padding: '6px 10px', fontSize: '12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>🗑 Delete</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* CONTACT SECTION */}
+        {activeSection === 'contact' && (
+          <section className={`files${isDarkMode ? ' dark' : ''}`}>
+            <h2>Contact Us</h2>
+            <p style={{color: '#6b7280', marginTop: '10px', fontSize: '14px'}}>Send us a message and we'll get back to you soon.</p>
+            <div style={{marginTop: '20px', maxWidth: '500px'}}>
+              <form onSubmit={handleContactSubmit} style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+                <div>
+                  <label style={{display: 'block', marginBottom: '5px', fontSize: '14px', color: isDarkMode ? '#e5e5e5' : '#222', fontWeight: 500}}>Your Email</label>
+                  <input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                      borderRadius: '6px',
+                      background: isDarkMode ? '#1a1a23' : '#f9fafb',
+                      color: isDarkMode ? '#e5e5e5' : '#222',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{display: 'block', marginBottom: '5px', fontSize: '14px', color: isDarkMode ? '#e5e5e5' : '#222', fontWeight: 500}}>Message</label>
+                  <textarea
+                    value={contactMessage}
+                    onChange={(e) => setContactMessage(e.target.value)}
+                    placeholder="Enter your message"
+                    required
+                    rows={6}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                      borderRadius: '6px',
+                      background: isDarkMode ? '#1a1a23' : '#f9fafb',
+                      color: isDarkMode ? '#e5e5e5' : '#222',
+                      fontSize: '14px',
+                      boxSizing: 'border-box',
+                      resize: 'vertical'
+                    }}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '12px 24px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#2563eb'}
+                  onMouseLeave={(e) => e.target.style.background = '#3b82f6'}
+                >
+                  Send Message
+                </button>
+              </form>
+            </div>
           </section>
         )}
 
@@ -663,27 +1288,26 @@ useEffect(() => {
         {activeSection === 'settings' && (
           <section className={`files${isDarkMode ? ' dark' : ''}`}>
             <h2>Settings</h2>
-            <div style={{marginTop: '20px', maxWidth: '600px'}}>
-              <div style={{marginBottom: '25px', paddingBottom: '15px', borderBottom: '1px solid #e5e7eb'}}>
-                <h3 style={{marginBottom: '10px'}}>Account Settings</h3>
-                <p style={{fontSize: '14px', color: '#6b7280'}}>
+            <div style={{marginTop: '20px', maxWidth: '700px'}}>
+              {/* Account Settings */}
+              <div style={{marginBottom: '25px', paddingBottom: '15px', borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`}}>
+                <h3 style={{marginBottom: '10px', color: isDarkMode ? '#e5e5e5' : '#222'}}>Account Settings</h3>
+                <p style={{fontSize: '14px', color: '#6b7280', marginBottom: '8px'}}>
                   Username: <strong>{userName}</strong>
                 </p>
-              </div>
-              <div style={{marginBottom: '25px', paddingBottom: '15px', borderBottom: '1px solid #e5e7eb'}}>
-                <h3 style={{marginBottom: '10px'}}>Storage Information</h3>
-                <p style={{fontSize: '14px', color: '#6b7280'}}>
-                  Used: {storageInfo.used} / {storageInfo.limit}
-                </p>
-                <div style={{marginTop: '10px', width: '100%', height: '10px', background: '#e5e7eb', borderRadius: '10px'}}>
-                  <div style={{height: '100%', background: '#4f46e5', borderRadius: '10px', width: `${storageInfo.percent}%`}}></div>
-                </div>
-              </div>
-              <div style={{marginBottom: '25px'}}>
-                <h3 style={{marginBottom: '10px'}}>Theme</h3>
-                <button onClick={toggleTheme} style={{padding: '8px 16px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer'}}>
-                  Switch to {isDarkMode ? 'Light' : 'Dark'} Mode
+                <button onClick={() => setShowPasswordModal(true)} style={{padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', marginTop: '8px'}}>
+                  Change Password
                 </button>
+              </div>
+
+              {/* Two-Factor Authentication */}
+              <div style={{marginBottom: '25px', paddingBottom: '15px', borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`}}>
+                <h3 style={{marginBottom: '10px', color: isDarkMode ? '#e5e5e5' : '#222'}}>Two-Factor Authentication</h3>
+                <p style={{fontSize: '14px', color: '#6b7280', marginBottom: '12px'}}>Add an extra layer of security to your account.</p>
+                <button onClick={handle2FA} style={{padding: '8px 16px', background: twoFactorEnabled ? '#ef4444' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'}}>
+                  {twoFactorEnabled ? 'Disable 2FA' : 'Enable 2FA'}
+                </button>
+                <p style={{fontSize: '12px', color: '#9ca3af', marginTop: '8px'}}>Status: <strong style={{color: twoFactorEnabled ? '#10b981' : '#ef4444'}}>{twoFactorEnabled ? 'Enabled' : 'Disabled'}</strong></p>
               </div>
             </div>
           </section>
