@@ -1,17 +1,61 @@
 const mongoose = require("mongoose");
 
-const userSchema = new mongoose.Schema({
-  username: String,
-  email: String,
-  password: String,
-  storageUsed: {
-    type: Number,
-    default: 0
+const userSchema = new mongoose.Schema(
+  {
+    username: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true
+    },
+    password: {
+      type: String,
+      required: true
+    },
+    clusterName: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true
+    },
+    cloudName: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    storageUsedMB: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    // Keep bytes as the source of truth for strict quota checks.
+    storageUsed: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    storageLimitMB: {
+      type: Number,
+      default: 1024
+    },
+    storageLimit: {
+      type: Number,
+      default: 1073741824 // 1024MB in bytes
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
   },
-  storageLimit: {
-    type: Number,
-    default: 5368709120 // 5 GB in bytes
+  {
+    versionKey: false
   }
-});
+);
 
 module.exports = mongoose.model("User", userSchema);

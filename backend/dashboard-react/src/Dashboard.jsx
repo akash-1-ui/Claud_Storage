@@ -1,9 +1,12 @@
 // ...existing code...
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_ENDPOINTS } from "./config";
 import "./css/dashboard.css";
 import Chart from "chart.js/auto";
 import Switch from "./Switch";
+import Checkbox from "./Checkbox";
+import NeonCheckbox from "./columnbox";
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -33,13 +36,17 @@ function Dashboard() {
   const [favorites, setFavorites] = useState([]);
   const [trashedFiles, setTrashedFiles] = useState([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedFileIds, setSelectedFileIds] = useState([]);
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
 
   const fetchProfile = async () => {
     const token = localStorage.getItem("token");
     try {
-      const res = await fetch("http://localhost:5000/api/auth/profile", {
+      const res = await fetch(API_ENDPOINTS.AUTH.PROFILE, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -56,7 +63,7 @@ function Dashboard() {
   const fetchFiles = async () => {
     const token = localStorage.getItem("token");
     try {
-      const res = await fetch("http://localhost:5000/api/files", {
+      const res = await fetch(API_ENDPOINTS.FILES.GET_ALL, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -171,14 +178,18 @@ useEffect(() => {
 
   // Load profile photo from localStorage (user-specific)
   const savedPhoto = localStorage.getItem(`profilePhoto_${userName}`);
-  if (savedPhoto) {
-    setProfilePhoto(savedPhoto);
-  }
+  setProfilePhoto(savedPhoto || null);
   
-  // Load favorites
+  // Load favorites (persist across sessions until user explicitly removes)
   const savedFavorites = localStorage.getItem(`favorites_${userName}`);
-  if (savedFavorites && favorites.length === 0) {
-    setFavorites(JSON.parse(savedFavorites));
+  if (savedFavorites) {
+    try {
+      setFavorites(JSON.parse(savedFavorites));
+    } catch {
+      setFavorites([]);
+    }
+  } else {
+    setFavorites([]);
   }
 
   fetchProfile();
@@ -193,23 +204,48 @@ useEffect(() => {
 
 
   const logout = () => {
-    localStorage.clear();
-    navigate('/login');
+    localStorage.removeItem("token");
+    navigate('/intro');
   };
 
   const handleProfilePhotoUpload = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
-        setProfilePhoto(reader.result);
-        localStorage.setItem(`profilePhoto_${userName}`, reader.result);
-        showNotification('Profile photo updated!', 'success');
-        setShowProfileUpload(false);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showNotification('Please upload an image file');
+      return;
     }
+    if (file.size > 3 * 1024 * 1024) {
+      showNotification('Profile photo should be less than 3MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
+      setProfilePhoto(reader.result);
+      localStorage.setItem(`profilePhoto_${userName}`, reader.result);
+      showNotification('Profile photo updated!', 'success');
+      setShowProfileUpload(false);
+      setIsHamburgerOpen(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleProfilePhotoDrop = (e) => {
+    e.preventDefault();
+    const droppedFile = e.dataTransfer?.files?.[0];
+    if (!droppedFile) return;
+    handleProfilePhotoUpload({ target: { files: [droppedFile] } });
+  };
+
+  const handleRemoveProfilePhoto = () => {
+    const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
+    localStorage.removeItem(`profilePhoto_${userName}`);
+    setProfilePhoto(null);
+    setShowProfileUpload(false);
+    setIsHamburgerOpen(false);
+    showNotification('Profile photo removed', 'success');
   };
 
   const handleToggleFavorite = (file) => {
@@ -229,46 +265,138 @@ useEffect(() => {
 
   const handleFileUpload = async (files) => {
     const token = localStorage.getItem("token");
+    const userName = localStorage.getItem('userName') || 'user';
+    
+    if (!token) {
+      showNotification('❌ No authentication token found. Please log in again.');
+      return;
+    }
+
+    console.log("🚀 Starting Cloudinary upload. Files:", files.length);
+
     let uploaded = 0;
+    let successful = 0;
+    let failed = 0;
     setUploadProgress(0);
     setUploadStatus('Uploading...');
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      console.log(`\n📤 [${i + 1}/${files.length}] Uploading: ${file.name} (${(file.size / 1048576).toFixed(2)}MB)`);
+
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('upload_preset', 'course_uploads');
+
       try {
-        const res = await fetch("http://localhost:5000/api/files/upload", {
+        // Determine upload endpoint based on file type
+        let uploadUrl = 'https://api.cloudinary.com/v1_1/dzgccprpv/image/upload';
+        if (file.type.startsWith('video/')) {
+          uploadUrl = 'https://api.cloudinary.com/v1_1/dzgccprpv/video/upload';
+        } else if (file.type === 'application/pdf' || file.type.startsWith('application/')) {
+          uploadUrl = 'https://api.cloudinary.com/v1_1/dzgccprpv/raw/upload';
+        }
+
+        console.log(`📨 Uploading to: ${uploadUrl}`);
+        console.log(`📋 Sending: ${file.name} with preset cloudbox_unsigned`);
+
+        const cloudRes = await fetch(uploadUrl, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
           body: formData,
         });
-        if (res.ok) {
-          showNotification(`Upload successful!`, 'success');
-          // No need to update local state here, will refresh from server after all uploads
-        } else {
-          showNotification(`Failed to upload ${file.name}`);
+
+        const cloudData = await cloudRes.json();
+        console.log(`📊 Response status: ${cloudRes.status} ${cloudRes.statusText}`);
+        console.log(`📊 Response data:`, cloudData);
+        
+        if (!cloudRes.ok) {
+          console.error(`❌ Cloudinary error (${cloudRes.status}):`, JSON.stringify(cloudData, null, 2));
+          failed++;
+          const errorMsg = cloudData.error?.message || cloudData.message || `HTTP ${cloudRes.status}`;
+          showNotification(`❌ ${file.name}: ${errorMsg}`);
+          continue;
         }
-      } catch (err) {
-        showNotification(`Error uploading ${file.name}`);
+
+        if (!cloudData.secure_url) {
+          console.error(`❌ No secure_url in response:`, cloudData);
+          failed++;
+          showNotification(`❌ ${file.name}: Response missing file URL`);
+          continue;
+        }
+
+        console.log(`✅ Cloudinary upload OK: ${cloudData.secure_url}`);
+        console.log(`💾 Saving to database...`);
+        
+        try {
+          const saveRes = await fetch(API_ENDPOINTS.FILES.SAVE_FILE, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              fileName: file.name,
+              fileURL: cloudData.secure_url,
+              fileSize: file.size,
+              cloudinaryPublicId: cloudData.public_id || 'unknown'
+            }),
+          });
+
+          const saveData = await saveRes.json();
+          
+          if (!saveRes.ok) {
+            console.error(`❌ Database save failed (${saveRes.status}):`, saveData);
+            failed++;
+            showNotification(`⚠️ ${file.name} uploaded but save failed: ${saveData.message}`);
+            continue;
+          }
+
+          successful++;
+          console.log(`✅ Saved successfully`);
+          showNotification(`✅ ${file.name} uploaded!`, 'success');
+
+        } catch (saveErr) {
+          console.error(`❌ Save exception:`, saveErr.message);
+          failed++;
+          showNotification(`❌ ${file.name}: ${saveErr.message}`);
+        }
+
+      } catch (uploadErr) {
+        console.error(`❌ Upload exception:`, uploadErr);
+        failed++;
+        showNotification(`❌ ${file.name}: ${uploadErr.message}`);
       }
+      
       uploaded++;
-      setUploadProgress(Math.round(((uploaded) / files.length) * 100));
+      setUploadProgress(Math.round((uploaded / files.length) * 100));
     }
-    // After all uploads, fetch the latest files and profile from the server
+
+    console.log(`\n📊 Complete - Success: ${successful}, Failed: ${failed}, Total: ${files.length}`);
+
+    // Refresh files
     await fetchFiles();
     await fetchProfile();
-    setUploadStatus('Upload complete!');
+    
+    // Show status
+    let statusMsg = '';
+    if (successful > 0 && failed === 0) {
+      statusMsg = `✅ ${successful} uploaded`;
+    } else if (successful > 0) {
+      statusMsg = `⚠️ ${successful}/${files.length} uploaded`;
+    } else {
+      statusMsg = `❌ ${failed} failed`;
+    }
+    
+    setUploadStatus(statusMsg);
     setTimeout(() => {
       setUploadProgress(0);
       setUploadStatus('');
-    }, 2000);
+    }, 3500);
   };
 
-  const showNotification = (message, type = 'error') => {
-    if (!notificationsEnabled) return; // Skip if notifications are disabled
-    const id = Date.now();
+  const showNotification = (message, type = 'error', force = false) => {
+    if (!notificationsEnabled && !force) return; // Skip only non-forced notifications when disabled
+    const id = Date.now() + Math.floor(Math.random() * 1000);
     setNotifications(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
@@ -278,7 +406,7 @@ useEffect(() => {
   const handleDownload = async (file) => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:5000/api/files/download/${file._id}`, {
+      const response = await fetch(API_ENDPOINTS.FILES.DOWNLOAD(file._id), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -308,7 +436,7 @@ useEffect(() => {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:5000/api/files/rename/${file._id}`, {
+      const response = await fetch(API_ENDPOINTS.FILES.RENAME(file._id), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -392,7 +520,7 @@ useEffect(() => {
     // Also attempt to delete from backend
     try {
       const token = localStorage.getItem("token");
-      await fetch(`http://localhost:5000/api/files/${file._id}`, {
+      await fetch(API_ENDPOINTS.FILES.DELETE(file._id), {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -452,16 +580,19 @@ useEffect(() => {
     showNotification('File permanently deleted!', 'success');
   };
 
-  const handle2FA = () => {
-    setTwoFactorEnabled(!twoFactorEnabled);
-    showNotification(twoFactorEnabled ? '2FA disabled' : '2FA enabled. Check your email for setup instructions.', 'success');
-  };
-
-  const handleChangePassword = (e) => {
+  const handleChangePassword = async (e) => {
     e.preventDefault();
-    const currentPass = document.getElementById('current-pass')?.value || '';
-    const newPass = document.getElementById('new-pass')?.value || '';
-    const confirmPass = document.getElementById('confirm-pass')?.value || '';
+    const token = localStorage.getItem("token");
+    if (!token) {
+      showNotification('Session expired. Please log in again.');
+      navigate('/login');
+      return;
+    }
+
+    const formData = new FormData(e.currentTarget);
+    const currentPass = (formData.get('currentPassword') || '').toString();
+    const newPass = (formData.get('newPassword') || '').toString();
+    const confirmPass = (formData.get('confirmPassword') || '').toString();
 
     if (!currentPass || !newPass || !confirmPass) {
       showNotification('Please fill all password fields');
@@ -475,19 +606,58 @@ useEffect(() => {
       showNotification('Password must be at least 6 characters');
       return;
     }
-    showNotification('Password changed successfully!', 'success');
-    setShowPasswordModal(false);
+
+    try {
+      const response = await fetch(API_ENDPOINTS.AUTH.CHANGE_PASSWORD, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword: currentPass,
+          newPassword: newPass
+        })
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (response.ok && data.success) {
+        showNotification('Password changed successfully!', 'success');
+        setShowPasswordModal(false);
+        e.currentTarget.reset();
+        setShowCurrentPass(false);
+        setShowNewPass(false);
+        setShowConfirmPass(false);
+      } else {
+        showNotification(data.message || 'Failed to change password');
+      }
+    } catch (err) {
+      console.error('Error changing password:', err);
+      showNotification('Error changing password');
+    }
   };
 
   const handleContactSubmit = async (e) => {
     e.preventDefault();
+    const token = localStorage.getItem("token");
+    if (!token) {
+      showNotification('Session expired. Please log in again.', 'error', true);
+      navigate('/login');
+      return;
+    }
+
     if (!contactEmail || !contactMessage) {
-      showNotification('Please fill in both email and message');
+      showNotification('Please fill in both email and message', 'error', true);
       return;
     }
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch("http://localhost:5000/api/contact", {
+      const res = await fetch(API_ENDPOINTS.CONTACT.SEND, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -495,15 +665,156 @@ useEffect(() => {
         },
         body: JSON.stringify({ email: contactEmail, message: contactMessage }),
       });
+      
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+      
       if (res.ok) {
-        showNotification('Message sent successfully!', 'success');
+        showNotification(data.message || 'Message sent successfully!', 'success', true);
         setContactEmail('');
         setContactMessage('');
+      } else if (res.status === 401 || res.status === 403) {
+        showNotification('Session expired. Please log in again.', 'error', true);
+        navigate('/login');
       } else {
-        showNotification('Failed to send message');
+        console.error('Contact form error:', data.message || JSON.stringify(data));
+        showNotification(data.message || 'Failed to send message', 'error', true);
       }
     } catch (err) {
-      showNotification('Error sending message');
+      console.error('Contact form submission error:', err.message);
+      showNotification('Error sending message: ' + err.message, 'error', true);
+    }
+  };
+
+  const toggleFileSelection = (fileId) => {
+    if (selectedFileIds.includes(fileId)) {
+      setSelectedFileIds(selectedFileIds.filter(id => id !== fileId));
+    } else {
+      setSelectedFileIds([...selectedFileIds, fileId]);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFileIds.length === sortedFiles.length) {
+      setSelectedFileIds([]);
+    } else {
+      setSelectedFileIds(sortedFiles.map(f => f._id));
+    }
+  };
+
+  const toggleRowSelection = (rowFileIds) => {
+    const allInRowSelected = rowFileIds.every(id => selectedFileIds.includes(id));
+    if (allInRowSelected) {
+      // Deselect all in row
+      setSelectedFileIds(selectedFileIds.filter(id => !rowFileIds.includes(id)));
+    } else {
+      // Select all in row
+      const newSelected = new Set(selectedFileIds);
+      rowFileIds.forEach(id => newSelected.add(id));
+      setSelectedFileIds([...newSelected]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedFileIds.length === 0) {
+      showNotification('No files selected');
+      return;
+    }
+    if (!confirm(`Delete ${selectedFileIds.length} file(s)?`)) return;
+
+    const token = localStorage.getItem("token");
+    let deleted = 0;
+    let failed = 0;
+    const total = selectedFileIds.length;
+    
+    for (const fileId of selectedFileIds) {
+      const file = files.find(f => f._id === fileId);
+      if (!file) {
+        failed++;
+        continue;
+      }
+      try {
+        const res = await fetch(`http://localhost:5000/api/files/${fileId}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (res.ok) {
+          deleted++;
+        } else {
+          failed++;
+        }
+      } catch (err) {
+        console.error('Error deleting file:', err);
+        failed++;
+      }
+    }
+    
+    // Enhanced message with success/fail details
+    let successMessage;
+    if (deleted > 0 && failed > 0) {
+      successMessage = `✓ Deleted ${deleted}/${total} successfully | ✗ Failed: ${failed}`;
+    } else if (deleted === total) {
+      successMessage = `✓ Successfully deleted all ${deleted} file(s)!`;
+    } else {
+      successMessage = `✗ Failed to delete ${failed} file(s)`;
+    }
+    
+    showNotification(successMessage, deleted > 0 ? 'success' : 'error');
+    setSelectedFileIds([]);
+    await fetchFiles();
+    await fetchProfile();
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedFileIds.length === 0) {
+      showNotification('No files selected');
+      return;
+    }
+    const filesToDownload = files.filter(f => selectedFileIds.includes(f._id));
+    for (const file of filesToDownload) {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(`http://localhost:5000/api/files/download/${file._id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = file.name;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }
+      } catch (err) {
+        console.error('Error downloading file:', err);
+      }
+    }
+    showNotification(`${filesToDownload.length} file(s) downloaded!`, 'success');
+  };
+
+  const handleBulkShare = async () => {
+    if (selectedFileIds.length === 0) {
+      showNotification('No files selected');
+      return;
+    }
+    const filesToShare = files.filter(f => selectedFileIds.includes(f._id));
+    const shareText = filesToShare.map(f => `${f.name}: ${f.url}`).join('\n\n');
+    try {
+      await navigator.clipboard.writeText(shareText);
+      showNotification(`${filesToShare.length} file link(s) copied!`, 'success');
+    } catch (err) {
+      showNotification('Failed to copy links');
     }
   };
 
@@ -546,8 +857,8 @@ useEffect(() => {
   };
 
   const getStorageInfo = () => {
-    const storageLimit = 5; // 5 GB
-    const storageLimitBytes = storageLimit * 1024 * 1024 * 1024;
+    // Use 1GB per user from userProfile, fallback to 1GB if not available
+    const limitBytes = (userProfile && userProfile.storageLimit) || (1 * 1024 * 1024 * 1024);
     let storageUsedBytes = 0;
     let progressPercent = 0;
 
@@ -559,17 +870,26 @@ useEffect(() => {
       storageUsedBytes = calculateStorageFromFiles() * 1024 * 1024; // Convert MB to bytes
     }
 
-    const limitBytes = (userProfile && userProfile.storageLimit) || storageLimitBytes;
     const usedGB = storageUsedBytes / (1024 * 1024 * 1024);
     const limitGB = limitBytes / (1024 * 1024 * 1024);
     progressPercent = (storageUsedBytes / limitBytes) * 100;
 
-    if (usedGB < 1) {
+    let displayText = '';
+    if (progressPercent >= 100) {
+      displayText = 'Storage Full';
+    } else if (usedGB < 1) {
       const usedMB = (storageUsedBytes / (1024 * 1024)).toFixed(2);
-      return { used: `${usedMB} MB`, limit: `${limitGB.toFixed(2)} GB`, percent: Math.min(progressPercent, 100) };
+      displayText = `${usedMB} MB / 1 GB`;
     } else {
-      return { used: `${usedGB.toFixed(2)} GB`, limit: `${limitGB.toFixed(2)} GB`, percent: Math.min(progressPercent, 100) };
+      displayText = `${usedGB.toFixed(2)} GB / 1 GB`;
     }
+
+    return { 
+      used: displayText, 
+      limit: `1 GB`, 
+      percent: Math.min(progressPercent, 100),
+      isFull: progressPercent >= 100
+    };
   };
 
   const storageInfo = getStorageInfo();
@@ -633,7 +953,7 @@ useEffect(() => {
 
       {/* Sidebar */}
       <aside className={`sidebar${isDarkMode ? ' dark' : ''}`}> 
-        <div className="logo" style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+        <div className="logo" style={{display: 'flex', alignItems: 'center', gap: '0'}}>
           <span>CloudBox</span>
           <img src="/src/assets/LOGO.png" alt="CloudBox" style={{width: '80px', height: '80px', objectFit: 'contain'}} />
         </div>
@@ -649,12 +969,34 @@ useEffect(() => {
           </ul>
         </nav>
         <div className="storage-usage">
-          <p>
-            Storage Used: {loading ? 'Loading...' : `${storageInfo.used} / ${storageInfo.limit}`}
+          <p style={{color: storageInfo.isFull ? '#ef4444' : 'inherit'}}>
+            {loading ? 'Loading...' : storageInfo.used}
           </p>
           <div className="progress-bar">
-            <div className="progress" style={{ width: `${storageInfo.percent}%` }}></div>
+            <div className="progress" style={{ width: `${storageInfo.percent}%`, background: storageInfo.isFull ? '#ef4444' : '#3b82f6' }}></div>
           </div>
+          {storageInfo.isFull && (
+            <button
+              onClick={() => showNotification('Upgrade plans: 📦 50GB Plan ($2.99/mo) | 💎 1TB Plan ($9.99/mo) | 🚀 Premium Plan ($19.99/mo)', 'success')}
+              style={{
+                marginTop: '8px',
+                width: '100%',
+                padding: '8px',
+                background: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 600,
+                transition: '0.2s'
+              }}
+              onMouseEnter={(e) => e.target.style.background = '#dc2626'}
+              onMouseLeave={(e) => e.target.style.background = '#ef4444'}
+            >
+              📦 Upgrade Storage
+            </button>
+          )}
         </div>
         <button
           className="upload-btn"
@@ -666,6 +1008,38 @@ useEffect(() => {
 
       {/* Main Content */}
       <main className={`main-content${isDarkMode ? ' dark' : ''}`}> 
+        {notifications.length > 0 && (
+          <div
+            style={{
+              position: 'fixed',
+              top: '18px',
+              right: '18px',
+              zIndex: 3000,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              maxWidth: '340px'
+            }}
+          >
+            {notifications.map((n) => (
+              <div
+                key={n.id}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${n.type === 'success' ? '#10b981' : '#ef4444'}`,
+                  background: n.type === 'success' ? '#ecfdf5' : '#fef2f2',
+                  color: n.type === 'success' ? '#065f46' : '#991b1b',
+                  boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
+                  fontSize: '13px',
+                  fontWeight: 500
+                }}
+              >
+                {n.message}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Header */}
         <header>
@@ -681,6 +1055,24 @@ useEffect(() => {
             />
           </div>
           <div className="header-right">
+            {/* Cloud Icon for mobile */}
+            <span 
+              className="cloud-icon"
+              title="Upload files"
+              onClick={() => document.getElementById('file-upload-input').click()}
+            >
+              ☁️
+            </span>
+
+            {/* Mobile Upload Button */}
+            <button
+              className="mobile-upload-btn"
+              onClick={() => document.getElementById('file-upload-input').click()}
+              title="Upload files"
+            >
+              ☁️ Upload
+            </button>
+
             <Switch isDarkMode={isDarkMode} onChange={toggleTheme} />
             
             {/* Hamburger Menu */}
@@ -735,7 +1127,10 @@ useEffect(() => {
                   </div>
 
                   <button
-                    onClick={() => setShowProfileUpload(!showProfileUpload)}
+                    onClick={() => {
+                      setShowProfileUpload(true);
+                      setIsHamburgerOpen(false);
+                    }}
                     style={{
                       width: '100%',
                       padding: '12px 16px',
@@ -751,7 +1146,99 @@ useEffect(() => {
                     onMouseEnter={(e) => e.target.style.background = isDarkMode ? '#353545' : '#f9fafb'}
                     onMouseLeave={(e) => e.target.style.background = 'transparent'}
                   >
-                    Update Profile Photo
+                    Upload Profile Photo
+                  </button>
+
+                  <button
+                    onClick={handleRemoveProfilePhoto}
+                    disabled={!profilePhoto}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: profilePhoto ? 'pointer' : 'not-allowed',
+                      textAlign: 'left',
+                      color: profilePhoto ? (isDarkMode ? '#e5e5e5' : '#222') : '#9ca3af',
+                      fontSize: '14px',
+                      borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                      transition: '0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (profilePhoto) e.target.style.background = isDarkMode ? '#353545' : '#f9fafb';
+                    }}
+                    onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                  >
+                    Remove Profile Photo
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveSection('settings');
+                      setIsHamburgerOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: isDarkMode ? '#e5e5e5' : '#222',
+                      fontSize: '14px',
+                      borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                      transition: '0.2s'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = isDarkMode ? '#353545' : '#f9fafb'}
+                    onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                  >
+                    Account Settings
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowPasswordModal(true);
+                      setIsHamburgerOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: isDarkMode ? '#e5e5e5' : '#222',
+                      fontSize: '14px',
+                      borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                      transition: '0.2s'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = isDarkMode ? '#353545' : '#f9fafb'}
+                    onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                  >
+                    Change Password
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveSection('contact');
+                      setIsHamburgerOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: isDarkMode ? '#e5e5e5' : '#222',
+                      fontSize: '14px',
+                      borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                      transition: '0.2s'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = isDarkMode ? '#353545' : '#f9fafb'}
+                    onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                  >
+                    Contact Support
                   </button>
 
                   <button
@@ -836,6 +1323,8 @@ useEffect(() => {
               }}
               onMouseEnter={(e) => e.target.style.background = isDarkMode ? '#353545' : '#f9fafb'}
               onMouseLeave={(e) => e.target.style.background = 'transparent'}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleProfilePhotoDrop}
               >
                 Click to upload or drag and drop
                 <input
@@ -889,15 +1378,102 @@ useEffect(() => {
               <form onSubmit={handleChangePassword} style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
                 <div>
                   <label style={{display: 'block', marginBottom: '6px', fontSize: '13px', color: isDarkMode ? '#9ca3af' : '#6b7280', fontWeight: 500}}>Current Password</label>
-                  <input type="password" id="current-pass" placeholder="Enter current password" style={{width: '100%', padding: '10px', border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`, borderRadius: '6px', background: isDarkMode ? '#1a1a23' : '#f9fafb', color: isDarkMode ? '#e5e5e5' : '#222', fontSize: '13px', boxSizing: 'border-box'}} />
+                  <div style={{position: 'relative', display: 'flex', alignItems: 'center'}}>
+                    <input 
+                      type={showCurrentPass ? 'text' : 'password'} 
+                      id="current-pass" 
+                      name="currentPassword"
+                      placeholder="Enter current password" 
+                      style={{width: '100%', padding: '10px 35px 10px 10px', border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`, borderRadius: '6px', background: isDarkMode ? '#1a1a23' : '#f9fafb', color: isDarkMode ? '#e5e5e5' : '#222', fontSize: '13px', boxSizing: 'border-box'}} 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPass(!showCurrentPass)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        background: 'none',
+                        border: 'none',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        fontSize: '20px',
+                        padding: '4px 8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: 'none'
+                      }}
+                      title={showCurrentPass ? 'Hide password' : 'Show password'}
+                    >
+                      {showCurrentPass ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label style={{display: 'block', marginBottom: '6px', fontSize: '13px', color: isDarkMode ? '#9ca3af' : '#6b7280', fontWeight: 500}}>New Password</label>
-                  <input type="password" id="new-pass" placeholder="Enter new password (min 6 chars)" style={{width: '100%', padding: '10px', border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`, borderRadius: '6px', background: isDarkMode ? '#1a1a23' : '#f9fafb', color: isDarkMode ? '#e5e5e5' : '#222', fontSize: '13px', boxSizing: 'border-box'}} />
+                  <div style={{position: 'relative', display: 'flex', alignItems: 'center'}}>
+                    <input 
+                      type={showNewPass ? 'text' : 'password'} 
+                      id="new-pass" 
+                      name="newPassword"
+                      placeholder="Enter new password (min 6 chars)" 
+                      style={{width: '100%', padding: '10px 35px 10px 10px', border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`, borderRadius: '6px', background: isDarkMode ? '#1a1a23' : '#f9fafb', color: isDarkMode ? '#e5e5e5' : '#222', fontSize: '13px', boxSizing: 'border-box'}} 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPass(!showNewPass)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        background: 'none',
+                        border: 'none',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        fontSize: '20px',
+                        padding: '4px 8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: 'none'
+                      }}
+                      title={showNewPass ? 'Hide password' : 'Show password'}
+                    >
+                      {showNewPass ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label style={{display: 'block', marginBottom: '6px', fontSize: '13px', color: isDarkMode ? '#9ca3af' : '#6b7280', fontWeight: 500}}>Confirm Password</label>
-                  <input type="password" id="confirm-pass" placeholder="Confirm new password" style={{width: '100%', padding: '10px', border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`, borderRadius: '6px', background: isDarkMode ? '#1a1a23' : '#f9fafb', color: isDarkMode ? '#e5e5e5' : '#222', fontSize: '13px', boxSizing: 'border-box'}} />
+                  <div style={{position: 'relative', display: 'flex', alignItems: 'center'}}>
+                    <input 
+                      type={showConfirmPass ? 'text' : 'password'} 
+                      id="confirm-pass" 
+                      name="confirmPassword"
+                      placeholder="Confirm new password" 
+                      style={{width: '100%', padding: '10px 35px 10px 10px', border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`, borderRadius: '6px', background: isDarkMode ? '#1a1a23' : '#f9fafb', color: isDarkMode ? '#e5e5e5' : '#222', fontSize: '13px', boxSizing: 'border-box'}} 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPass(!showConfirmPass)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        background: 'none',
+                        border: 'none',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        fontSize: '20px',
+                        padding: '4px 8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: 'none'
+                      }}
+                      title={showConfirmPass ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPass ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
                 </div>
                 <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
                   <button type="submit" style={{flex: 1, padding: '10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 500}}>
@@ -923,6 +1499,18 @@ useEffect(() => {
             <div className="files-header">
               <h2>All Files</h2>
               <div className="sort-options">
+                {/* Select Checkbox */}
+                <div style={{display: 'flex', alignItems: 'center', gap: '8px', margin: '0 12px'}}>
+                  <Checkbox 
+                    checked={selectMode}
+                    onChange={() => {
+                      setSelectMode(!selectMode);
+                      setSelectedFileIds([]);
+                    }}
+                    id="select-mode-checkbox"
+                  />
+                  <label htmlFor="select-mode-checkbox" style={{fontSize: '14px', fontWeight: 500, color: selectMode ? '#3b82f6' : '#374151', cursor: 'pointer', userSelect: 'none'}}>Select</label>
+                </div>
                 <label>Sort by:</label>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                   <option value="date">Date Modified</option>
@@ -932,6 +1520,82 @@ useEffect(() => {
                 </select>
               </div>
             </div>
+
+            {/* Bulk Action Bar */}
+            {selectMode && (
+              <div style={{
+                background: isDarkMode ? '#1a1a23' : '#f0f4f8',
+                padding: '12px 16px',
+                borderRadius: '6px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`
+              }}>
+                <Checkbox 
+                  checked={selectedFileIds.length === sortedFiles.length && sortedFiles.length > 0}
+                  onChange={toggleSelectAll}
+                  id="select-all"
+                />
+                <span style={{color: isDarkMode ? '#9ca3af' : '#6b7280', fontSize: '14px', fontWeight: 500}}>
+                  {selectedFileIds.length > 0 ? `${selectedFileIds.length} selected` : 'Select All'}
+                </span>
+                {selectedFileIds.length > 0 && (
+                  <>
+                    <div style={{flex: 1}}></div>
+                    <button
+                      onClick={handleBulkDownload}
+                      title="Download selected"
+                      style={{
+                        padding: '6px 12px',
+                        background: '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 500
+                      }}
+                    >
+                      ⬇️ Download
+                    </button>
+                    <button
+                      onClick={handleBulkShare}
+                      title="Copy links of selected"
+                      style={{
+                        padding: '6px 12px',
+                        background: '#10b981',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 500
+                      }}
+                    >
+                      ↗️ Share
+                    </button>
+                    <button
+                      onClick={handleBulkDelete}
+                      title="Delete selected"
+                      style={{
+                        padding: '6px 12px',
+                        background: '#ef4444',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 500
+                      }}
+                    >
+                       🗑️ Delete
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Drag & Drop Upload Zone */}
             <div 
@@ -1000,55 +1664,164 @@ useEffect(() => {
                     {sortedDates.map(date => (
                       <div key={date} className="date-section">
                         <h3 className="date-header">{date}</h3>
-                        <div className="grid-view">
-                          {groupedByDate[date].map((file, index) => {
-                            const isFavorited = favorites.some(fav => fav._id === file._id);
-                            return (
-                              <div key={index} className="file-item">
+                        <div style={{position: 'relative'}}>
+                          {selectMode ? (
+                            // Select Mode: Show grid with row-based checkboxes
+                            (() => {
+                              const files = groupedByDate[date];
+                              const rows = [];
+                              for (let i = 0; i < files.length; i += 4) {
+                                rows.push(files.slice(i, i + 4));
+                              }
+                              
+                              return (
                                 <div style={{position: 'relative'}}>
-                                  {file.isImage ? (
-                                    <img src={file.url} alt={file.name} className="file-thumb" onClick={() => window.open(file.url, '_blank')} style={{cursor: 'pointer'}} />
-                                  ) : file.isVideo ? (
-                                    <video src={file.url} className="file-thumb" style={{cursor: 'pointer'}} onClick={() => window.open(file.url, '_blank')} />
-                                  ) : (
-                                    <div className="file-icon">📄</div>
-                                  )}
-                                  <button
-                                    onClick={() => handleToggleFavorite(file)}
+                                  {rows.map((rowFiles, rowIndex) => {
+                                    const rowFileIds = rowFiles.map(f => f._id);
+                                    const selectedInRow = rowFileIds.filter(id => selectedFileIds.includes(id)).length;
+                                    const allSelectedInRow = selectedInRow === rowFiles.length;
+                                    const someSelectedInRow = selectedInRow > 0 && selectedInRow < rowFiles.length;
+                                    
+                                    return (
+                                      <div
+                                        key={rowIndex}
+                                        style={{
+                                          display: 'flex',
+                                          marginBottom: '16px',
+                                          gap: '16px',
+                                          alignItems: 'center',
+                                          position: 'relative'
+                                        }}
+                                      >
+                                        {/* Row Group Checkbox - Show for all rows */}
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                minWidth: '30px',
+                                                flexShrink: 0
+                                            }}
+                                        >
+                                            <NeonCheckbox
+                                                checked={selectedInRow > 0}
+                                                onChange={() => toggleRowSelection(rowFileIds)}
+                                            />
+                                        </div>
+
+                                        {/* Grid of files - max 4 per row */}
+                                        <div style={{display: 'grid', gridTemplateColumns: `repeat(${Math.min(rowFiles.length, 4)}, 1fr)`, gap: '12px', width: `calc(25% * ${Math.min(rowFiles.length, 4)})`}}>
+                                          {rowFiles.map((file, fileIndex) => {
+                                            const isSelected = selectedFileIds.includes(file._id);
+                                            return (
+                                              <div 
+                                                key={fileIndex} 
+                                                className="file-item"
+                                                style={{
+                                                  position: 'relative',
+                                                  opacity: isSelected ? 0.8 : 1,
+                                                  boxShadow: isSelected ? '0 0 0 3px #3b82f6' : 'none',
+                                                  borderRadius: '8px',
+                                                  overflow: 'hidden'
+                                                }}
+                                              >
+                                                <div style={{position: 'absolute', top: '12px', right: '12px', zIndex: 20}}>
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={() => toggleFileSelection(file._id)}
+                                                    id={`file-${file._id}`}
+                                                    className="file-select-checkbox"
+                                                    aria-label={`Select ${file.name}`}
+                                                  />
+                                                </div>
+                                                <div style={{position: 'relative'}}>
+                                                  {file.isImage ? (
+                                                    <img src={file.url} alt={file.name} className="file-thumb" style={{cursor: 'default'}} />
+                                                  ) : file.isVideo ? (
+                                                    <video src={file.url} className="file-thumb" style={{cursor: 'default'}} />
+                                                  ) : (
+                                                    <div className="file-icon">📄</div>
+                                                  )}
+                                                </div>
+                                                <div className="file-info">
+                                                  <p title={file.name}>{file.name}</p>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            // Normal Mode: Show standard grid view
+                            <div className="grid-view">
+                              {groupedByDate[date].map((file, index) => {
+                                const isSelected = selectedFileIds.includes(file._id);
+                                const isFavorited = favorites.some(fav => fav._id === file._id);
+                                return (
+                                  <div 
+                                    key={index} 
+                                    className="file-item"
                                     style={{
-                                      position: 'absolute',
-                                      top: '8px',
-                                      right: '8px',
-                                      background: 'rgba(255,255,255,0.9)',
-                                      border: 'none',
-                                      borderRadius: '50%',
-                                      width: '32px',
-                                      height: '32px',
-                                      fontSize: '18px',
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      transition: 'all 0.2s ease',
-                                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                                      position: 'relative',
+                                      opacity: isSelected ? 0.8 : 1,
+                                      border: isSelected ? '2px solid #3b82f6' : 'none',
+                                      borderRadius: '8px',
+                                      overflow: 'hidden'
                                     }}
-                                    title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
                                   >
-                                    {isFavorited ? '❤️' : '🤍'}
-                                  </button>
-                                </div>
-                                <div className="file-info">
-                                  <p title={file.name}>{file.name}</p>
-                                </div>
-                                <div className="file-actions">
-                                  <button onClick={() => handleDownload(file)} title="Download">⬇</button>
-                                  <button onClick={() => handleShare(file)} title="Share">↗</button>
-                                  <button onClick={() => handleRename(file)} title="Rename">✏</button>
-                                  <button onClick={() => handleDelete(file)} title="Delete">🗑</button>
-                                </div>
-                              </div>
-                            );
-                          })}
+                                    <div style={{position: 'relative'}}>
+                                      {file.isImage ? (
+                                        <img src={file.url} alt={file.name} className="file-thumb" onClick={() => window.open(file.url, '_blank')} style={{cursor: 'pointer'}} />
+                                      ) : file.isVideo ? (
+                                        <video src={file.url} className="file-thumb" style={{cursor: 'pointer'}} onClick={() => window.open(file.url, '_blank')} />
+                                      ) : (
+                                        <div className="file-icon">📄</div>
+                                      )}
+                                      <button
+                                        onClick={() => handleToggleFavorite(file)}
+                                        style={{
+                                          position: 'absolute',
+                                          top: '8px',
+                                          right: '8px',
+                                          background: 'rgba(255,255,255,0.9)',
+                                          border: 'none',
+                                          borderRadius: '50%',
+                                          width: '32px',
+                                          height: '32px',
+                                          fontSize: '18px',
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          transition: 'all 0.2s ease',
+                                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                                        }}
+                                        title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                                      >
+                                        {isFavorited ? '❤️' : '🤍'}
+                                      </button>
+                                    </div>
+                                    <div className="file-info">
+                                      <p title={file.name}>{file.name}</p>
+                                    </div>
+                                    <div className="file-actions">
+                                      <button onClick={() => handleDownload(file)} title="Download">⬇</button>
+                                      <button onClick={() => handleShare(file)} title="Share">↗</button>
+                                      <button onClick={() => handleRename(file)} title="Rename">✏</button>
+                                      <button onClick={() => handleDelete(file)} title="Delete">🗑</button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1118,59 +1891,65 @@ useEffect(() => {
                 <p>No favorites yet. Click the heart icon on files to add them here.</p>
               </div>
             ) : (
-              <div className="photos-container">
-                <div className="date-section">
-                  <div className="grid-view">
-                    {favorites.map((file, index) => {
-                      const isFavorited = favorites.some(fav => fav._id === file._id);
-                      return (
-                        <div key={index} className="file-item">
-                          <div style={{position: 'relative'}}>
-                            {file.isImage ? (
-                              <img src={file.url} alt={file.name} className="file-thumb" onClick={() => window.open(file.url, '_blank')} style={{cursor: 'pointer'}} />
-                            ) : file.isVideo ? (
-                              <video src={file.url} className="file-thumb" style={{cursor: 'pointer'}} onClick={() => window.open(file.url, '_blank')} />
-                            ) : (
-                              <div className="file-icon">📄</div>
-                            )}
-                            <button
-                              onClick={() => handleToggleFavorite(file)}
-                              style={{
-                                position: 'absolute',
-                                top: '8px',
-                                right: '8px',
-                                background: 'rgba(255,255,255,0.9)',
-                                border: 'none',
-                                borderRadius: '50%',
-                                width: '32px',
-                                height: '32px',
-                                fontSize: '18px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.2s ease',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                              }}
-                              title="Remove from favorites"
-                            >
-                              ❤️
-                            </button>
-                          </div>
-                          <div className="file-info">
-                            <p title={file.name}>{file.name}</p>
-                          </div>
-                          <div className="file-actions">
-                            <button onClick={() => handleDownload(file)} title="Download">⬇</button>
-                            <button onClick={() => handleShare(file)} title="Share">↗</button>
-                            <button onClick={() => handleRename(file)} title="Rename">✏</button>
-                            <button onClick={() => handleDelete(file)} title="Delete">🗑</button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+              <div className="grid-view">
+                {favorites.map((file, index) => {
+                  const isSelected = selectedFileIds.includes(file._id);
+                  return (
+                    <div 
+                      key={index} 
+                      className="file-item"
+                      style={{
+                        position: 'relative',
+                        opacity: isSelected ? 0.8 : 1,
+                        border: isSelected ? '2px solid #3b82f6' : 'none',
+                        borderRadius: '8px',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <div style={{position: 'relative'}}>
+                        {file.isImage ? (
+                          <img src={file.url} alt={file.name} className="file-thumb" onClick={() => window.open(file.url, '_blank')} style={{cursor: 'pointer'}} />
+                        ) : file.isVideo ? (
+                          <video src={file.url} className="file-thumb" style={{cursor: 'pointer'}} onClick={() => window.open(file.url, '_blank')} />
+                        ) : (
+                          <div className="file-icon">📄</div>
+                        )}
+                        <button
+                          onClick={() => handleToggleFavorite(file)}
+                          style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            background: 'rgba(255,255,255,0.9)',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '32px',
+                            height: '32px',
+                            fontSize: '18px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                          }}
+                          title="Remove from favorites"
+                        >
+                          ❤️
+                        </button>
+                      </div>
+                      <div className="file-info">
+                        <p title={file.name}>{file.name}</p>
+                      </div>
+                      <div className="file-actions">
+                        <button onClick={() => handleDownload(file)} title="Download">⬇</button>
+                        <button onClick={() => handleShare(file)} title="Share">↗</button>
+                        <button onClick={() => handleRename(file)} title="Rename">✏</button>
+                        <button onClick={() => handleDelete(file)} title="Delete">🗑</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -1300,15 +2079,6 @@ useEffect(() => {
                 </button>
               </div>
 
-              {/* Two-Factor Authentication */}
-              <div style={{marginBottom: '25px', paddingBottom: '15px', borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`}}>
-                <h3 style={{marginBottom: '10px', color: isDarkMode ? '#e5e5e5' : '#222'}}>Two-Factor Authentication</h3>
-                <p style={{fontSize: '14px', color: '#6b7280', marginBottom: '12px'}}>Add an extra layer of security to your account.</p>
-                <button onClick={handle2FA} style={{padding: '8px 16px', background: twoFactorEnabled ? '#ef4444' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'}}>
-                  {twoFactorEnabled ? 'Disable 2FA' : 'Enable 2FA'}
-                </button>
-                <p style={{fontSize: '12px', color: '#9ca3af', marginTop: '8px'}}>Status: <strong style={{color: twoFactorEnabled ? '#10b981' : '#ef4444'}}>{twoFactorEnabled ? 'Enabled' : 'Disabled'}</strong></p>
-              </div>
             </div>
           </section>
         )}
@@ -1321,3 +2091,4 @@ useEffect(() => {
 }
 
 export default Dashboard;
+

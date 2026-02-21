@@ -5,6 +5,7 @@ const fileSchema = new mongoose.Schema({
   fileName: String,
   fileURL: String,
   fileSize: Number,
+  cloudinaryPublicId: String,
   permission: {
     type: String,
     default: "private"

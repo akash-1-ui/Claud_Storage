@@ -3,6 +3,7 @@ body {
   padding: 0;
   display: block !important;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  perspective: 1200px;
 }
 
 .auth-container {
@@ -415,4 +416,41 @@ body {
     width: 100%;
     min-width: auto;
   }
+}
+
+/* Page Transition Animations - Horizontal Slide */
+@keyframes pagePushRight {
+  0% {
+    transform: translateX(0) translateZ(0);
+    opacity: 1;
+    filter: brightness(1);
+  }
+  100% {
+    transform: translateX(100vw) rotateY(15deg);
+    opacity: 0.7;
+    filter: brightness(0.9);
+  }
+}
+
+@keyframes pageSlideInLeft {
+  0% {
+    transform: translateX(-100vw) rotateY(-15deg);
+    opacity: 0;
+    filter: brightness(0.9);
+  }
+  100% {
+    transform: translateX(0) rotateY(0deg);
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+.page-transition-exit {
+  animation: pagePushRight 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+  transform-style: preserve-3d;
+}
+
+.page-transition-enter {
+  animation: pageSlideInLeft 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+  transform-style: preserve-3d;
 }

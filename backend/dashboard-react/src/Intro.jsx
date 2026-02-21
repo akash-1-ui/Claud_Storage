@@ -1,23 +1,38 @@
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import "./css/auth.css";
+import luffyBg from "./assets/luffy.jpg";
 
 function Intro() {
   const navigate = useNavigate();
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  const handleNavigate = (path) => {
+    setIsTransitioning(true);
+    setTimeout(() => {
+      navigate(path);
+      setIsTransitioning(false);
+    }, 600);
+  };
 
   return (
     <div
-      className="intro-container"
+      className={`intro-container ${isTransitioning ? 'page-lift' : ''}`}
       style={{
-        backgroundImage: "url(/src/assets/luffy.jpg)",
+        backgroundImage: `url(${luffyBg})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
-        backgroundAttachment: "fixed",
+        backgroundAttachment: "scroll",
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         position: "relative",
+        transition: "all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)",
+        transform: isTransitioning ? "translateY(-100vh) scale(0.95)" : "translateY(0)",
+        opacity: isTransitioning ? 0 : 1,
+        boxShadow: isTransitioning ? "0 -50px 100px rgba(0, 0, 0, 0.5)" : "none",
       }}
     >
       {/* Dark overlay */}
@@ -62,7 +77,7 @@ function Intro() {
         <div style={{ marginTop: "40px" }}>
           <button
             className="btn-primary"
-            onClick={() => navigate("/register")}
+            onClick={() => handleNavigate("/register")}
             style={{
               padding: "14px 48px",
               fontSize: "18px",
@@ -103,7 +118,7 @@ function Intro() {
             href="#"
             onClick={(e) => {
               e.preventDefault();
-              navigate("/login");
+              handleNavigate("/login");
             }}
             style={{
               color: "white",

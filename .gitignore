@@ -8,3 +8,7 @@ frontend/node_modules/
 *.env
 firebase-key.json
 backend/config/firebase-key.json
+
+# binaries & tools
+ngrok.exe
+ngrok
