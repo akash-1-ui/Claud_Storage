@@ -7,6 +7,8 @@ import Chart from "chart.js/auto";
 import Switch from "./Switch";
 import Checkbox from "./Checkbox";
 import NeonCheckbox from "./columnbox";
+import Hamster from "./css/Hamster";
+import Uploadloader from "./css/Uploadloader";
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -22,6 +24,7 @@ function Dashboard() {
   const [userProfile, setUserProfile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeSection, setActiveSection] = useState('files');
   const [contactEmail, setContactEmail] = useState('');
@@ -263,6 +266,9 @@ useEffect(() => {
 
 
   const handleFileUpload = async (files) => {
+    const filesToUpload = Array.from(files || []).filter(Boolean);
+    if (filesToUpload.length === 0) return;
+
     const token = localStorage.getItem("token");
 
     if (!token) {
@@ -273,76 +279,81 @@ useEffect(() => {
     let uploaded = 0;
     let successful = 0;
     let failed = 0;
+    setIsUploading(true);
     setUploadProgress(0);
     setUploadStatus("Uploading...");
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const formData = new FormData();
-      formData.append("file", file);
+    try {
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
+        const formData = new FormData();
+        formData.append("file", file);
 
-      try {
-        const uploadRes = await fetch(API_ENDPOINTS.FILES.UPLOAD, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        });
-
-        let uploadData = {};
-        let rawErrorText = "";
         try {
-          uploadData = await uploadRes.json();
-        } catch {
+          const uploadRes = await fetch(API_ENDPOINTS.FILES.UPLOAD, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: formData,
+          });
+
+          let uploadData = {};
+          let rawErrorText = "";
           try {
-            rawErrorText = (await uploadRes.text()) || "";
+            uploadData = await uploadRes.json();
           } catch {
-            rawErrorText = "";
+            try {
+              rawErrorText = (await uploadRes.text()) || "";
+            } catch {
+              rawErrorText = "";
+            }
           }
-        }
 
-        if (!uploadRes.ok || !uploadData.success) {
+          if (!uploadRes.ok || !uploadData.success) {
+            failed++;
+            const errorMessage =
+              uploadData.error ||
+              uploadData.message ||
+              rawErrorText ||
+              "Upload failed";
+            showNotification(`${file.name}: ${errorMessage}`);
+            uploaded++;
+            setUploadProgress(Math.round((uploaded / filesToUpload.length) * 100));
+            continue;
+          }
+
+          successful++;
+          showNotification(`${file.name} uploaded successfully.`, "success");
+        } catch (uploadErr) {
           failed++;
-          const errorMessage =
-            uploadData.error ||
-            uploadData.message ||
-            rawErrorText ||
-            "Upload failed";
-          showNotification(`${file.name}: ${errorMessage}`);
-          uploaded++;
-          setUploadProgress(Math.round((uploaded / files.length) * 100));
-          continue;
+          showNotification(`${file.name}: ${uploadErr.message}`);
         }
 
-        successful++;
-        showNotification(`${file.name} uploaded!`, "success");
-      } catch (uploadErr) {
-        failed++;
-        showNotification(`${file.name}: ${uploadErr.message}`);
+        uploaded++;
+        setUploadProgress(Math.round((uploaded / filesToUpload.length) * 100));
       }
 
-      uploaded++;
-      setUploadProgress(Math.round((uploaded / files.length) * 100));
+      await fetchFiles();
+      await fetchProfile();
+
+      let statusMsg = "";
+      if (successful > 0 && failed === 0) {
+        statusMsg = "Uploaded successfully.";
+      } else if (successful > 0) {
+        statusMsg = `Uploaded successfully (${successful}/${filesToUpload.length}).`;
+      } else {
+        statusMsg = "Upload failed.";
+      }
+
+      setUploadStatus(statusMsg);
+    } finally {
+      setIsUploading(false);
+      setTimeout(() => {
+        setUploadProgress(0);
+        setUploadStatus("");
+      }, 3500);
     }
-
-    await fetchFiles();
-    await fetchProfile();
-
-    let statusMsg = "";
-    if (successful > 0 && failed === 0) {
-      statusMsg = `${successful} uploaded`;
-    } else if (successful > 0) {
-      statusMsg = `${successful}/${files.length} uploaded`;
-    } else {
-      statusMsg = `${failed} failed`;
-    }
-
-    setUploadStatus(statusMsg);
-    setTimeout(() => {
-      setUploadProgress(0);
-      setUploadStatus("");
-    }, 3500);
   };
 
   const showNotification = (message, type = 'error', force = false) => {
@@ -396,7 +407,7 @@ useEffect(() => {
         body: JSON.stringify({ newName }),
       });
       if (response.ok) {
-        showNotification('File renamed successfully!', 'success');
+        showNotification('File renamed successfully.', 'success');
         await fetchFiles(); // Refresh the file list
       } else {
         showNotification('Failed to rename file');
@@ -466,7 +477,7 @@ useEffect(() => {
     
     // Remove from files
     setFiles(files.filter(f => f._id !== file._id));
-    showNotification('File moved to trash!', 'success');
+    showNotification('File deleted successfully.', 'success');
     
     // Also attempt to delete from backend
     try {
@@ -528,7 +539,7 @@ useEffect(() => {
     const updated = trashedFiles.filter(f => f._id !== file._id);
     setTrashedFiles(updated);
     localStorage.setItem(trashedKey, JSON.stringify(updated));
-    showNotification('File permanently deleted!', 'success');
+    showNotification('File deleted successfully.', 'success');
   };
 
   const handleChangePassword = async (e) => {
@@ -815,7 +826,9 @@ useEffect(() => {
 
   const handleFileInput = (e) => {
     const files = Array.from(e.target.files);
+    if (files.length === 0) return;
     handleFileUpload(files);
+    e.target.value = "";
   };
 
   const filteredFiles = files.filter(file =>
@@ -832,10 +845,8 @@ useEffect(() => {
         const aSize = parseFloat(a.size) || 0;
         const bSize = parseFloat(b.size) || 0;
         return aSize - bSize;
-      case 'date':
-        return new Date(b.updatedAt) - new Date(a.updatedAt);
       default:
-        return 0;
+        return a.name.localeCompare(b.name);
     }
   });
 
@@ -852,8 +863,7 @@ useEffect(() => {
   };
 
   const getStorageInfo = () => {
-    // Use 1GB per user from userProfile, fallback to 1GB if not available
-    const limitBytes = (userProfile && userProfile.storageLimit) || (1 * 1024 * 1024 * 1024);
+    const limitBytes = 1 * 1024 * 1024 * 1024; // Fixed at 1 GB
     let storageUsedBytes = 0;
     let progressPercent = 0;
 
@@ -865,24 +875,16 @@ useEffect(() => {
       storageUsedBytes = calculateStorageFromFiles() * 1024 * 1024; // Convert MB to bytes
     }
 
-    const usedGB = storageUsedBytes / (1024 * 1024 * 1024);
-    const limitGB = limitBytes / (1024 * 1024 * 1024);
     progressPercent = (storageUsedBytes / limitBytes) * 100;
-
-    let displayText = '';
-    if (progressPercent >= 100) {
-      displayText = 'Storage Full';
-    } else if (usedGB < 1) {
-      const usedMB = (storageUsedBytes / (1024 * 1024)).toFixed(2);
-      displayText = `${usedMB} MB / 1 GB`;
-    } else {
-      displayText = `${usedGB.toFixed(2)} GB / 1 GB`;
-    }
+    const clampedPercent = Math.min(Math.max(progressPercent, 0), 100);
+    const roundedPercent =
+      storageUsedBytes > 0 ? Math.max(1, Math.round(clampedPercent)) : 0;
+    const displayText = `${roundedPercent}% of 1 GB used`;
 
     return { 
       used: displayText, 
       limit: `1 GB`, 
-      percent: Math.min(progressPercent, 100),
+      percent: clampedPercent,
       isFull: progressPercent >= 100
     };
   };
@@ -1052,6 +1054,20 @@ useEffect(() => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            {activeSection === 'files' && (
+              <div className="header-filter">
+                <label htmlFor="file-filter-select">Filter:</label>
+                <select
+                  id="file-filter-select"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                >
+                  <option value="name">Name</option>
+                  <option value="type">Type</option>
+                  <option value="size">Size</option>
+                </select>
+              </div>
+            )}
           </div>
           <div className="header-right">
             {/* Cloud Icon for mobile */}
@@ -1510,13 +1526,6 @@ useEffect(() => {
                   />
                   <label htmlFor="select-mode-checkbox" style={{fontSize: '14px', fontWeight: 500, color: selectMode ? '#3b82f6' : '#374151', cursor: 'pointer', userSelect: 'none'}}>Select</label>
                 </div>
-                <label>Sort by:</label>
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-                  <option value="date">Date Modified</option>
-                  <option value="name">Name</option>
-                  <option value="type">Type</option>
-                  <option value="size">Size</option>
-                </select>
               </div>
             </div>
 
@@ -1604,6 +1613,7 @@ useEffect(() => {
               onClick={() => document.getElementById('file-upload-input').click()}
               style={{cursor: 'pointer'}}
             >
+              <Hamster />
               <p>Drag & drop files here or click to upload</p>
               <label htmlFor="file-upload-input" style={{display:'none'}}>Upload file</label>
               <input
@@ -1617,14 +1627,15 @@ useEffect(() => {
             </div>
 
             {/* Files View */}
-            {(uploadProgress > 0 || uploadStatus) && (
+            {(isUploading || uploadStatus) && (
               <div className="upload-progress">
-                <div className="upload-progress-bar">
-                  <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }}></div>
-                </div>
-                <div className="upload-progress-text" style={{color: '#222', fontWeight: 600, marginTop: '8px'}}>
-                  {uploadStatus || `${uploadProgress}%`}
-                </div>
+                {isUploading ? (
+                  <Uploadloader progress={uploadProgress} status={uploadStatus} />
+                ) : (
+                  <div className="upload-progress-text" style={{color: '#222', fontWeight: 600, marginTop: '8px'}}>
+                    {uploadStatus}
+                  </div>
+                )}
               </div>
             )}
             
