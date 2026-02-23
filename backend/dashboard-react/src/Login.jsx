@@ -12,6 +12,15 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
+  const handleAuthSuccess = (data) => {
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("userName", data.user.name);
+    setShowLoader(true);
+    setTimeout(() => {
+      navigate("/dashboard");
+    }, 1200);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -25,12 +34,7 @@ function Login() {
 
       const data = await res.json();
       if (data.token) {
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("userName", data.user.name);
-        setShowLoader(true);
-        setTimeout(() => {
-          navigate("/dashboard");
-        }, 1200);
+        handleAuthSuccess(data);
       } else {
         alert("Login failed: " + (data.message || "Invalid credentials"));
         setLoading(false);

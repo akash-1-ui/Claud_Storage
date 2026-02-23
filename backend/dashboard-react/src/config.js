@@ -13,6 +13,7 @@ export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: `${API_BASE_URL}/api/auth/login`,
     REGISTER: `${API_BASE_URL}/api/auth/register`,
+    GOOGLE: `${API_BASE_URL}/api/auth/google`,
     PROFILE: `${API_BASE_URL}/api/auth/profile`,
     CHANGE_PASSWORD: `${API_BASE_URL}/api/auth/change-password`,
   },

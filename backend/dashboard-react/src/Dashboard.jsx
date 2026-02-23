@@ -70,8 +70,9 @@ function Dashboard() {
       });
 
       const data = await res.json();
+      const fileList = Array.isArray(data) ? data : Array.isArray(data?.files) ? data.files : [];
       // Map data to match expected format, add isImage for thumbnails
-      const mappedFiles = data.map(file => ({
+      const mappedFiles = fileList.map(file => ({
         _id: file._id,
         name: file.fileName,
         type: file.fileName.split('.').pop().toUpperCase(),
@@ -225,7 +226,6 @@ useEffect(() => {
       const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
       setProfilePhoto(reader.result);
       localStorage.setItem(`profilePhoto_${userName}`, reader.result);
-      showNotification('Profile photo updated!', 'success');
       setShowProfileUpload(false);
       setIsHamburgerOpen(false);
     };
@@ -245,7 +245,6 @@ useEffect(() => {
     setProfilePhoto(null);
     setShowProfileUpload(false);
     setIsHamburgerOpen(false);
-    showNotification('Profile photo removed', 'success');
   };
 
   const handleToggleFavorite = (file) => {

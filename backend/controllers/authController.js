@@ -1,5 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const https = require("https");
+const crypto = require("crypto");
 const User = require("../models/userModel");
 const Cluster = require("../models/clusterModel");
 const File = require("../models/File");
@@ -14,6 +16,8 @@ const generateToken = (id) =>
   });
 
 const bytesToMB = (bytes) => Number((bytes / ONE_MB).toFixed(4));
+
+const clusterCapacityFilter = { $expr: { $lt: ["$currentUsers", "$maxUsers"] } };
 
 const syncClusterUsageFromUsers = async () => {
   const usage = await User.aggregate([
@@ -56,6 +60,56 @@ const syncClusterUsageFromUsers = async () => {
   await Cluster.bulkWrite(bulkOps, { ordered: false });
 };
 
+const reserveNextClusterSlot = async () =>
+  Cluster.findOneAndUpdate(
+    clusterCapacityFilter,
+    { $inc: { currentUsers: 1 } },
+    {
+      // Fill clusters in a stable order: first cluster to capacity, then next.
+      sort: { createdAt: 1, _id: 1 },
+      new: true
+    }
+  );
+
+const assignLegacyUsersWithoutCluster = async () => {
+  const legacyUsers = await User.find(
+    {
+      $or: [
+        { clusterName: { $exists: false } },
+        { clusterName: null },
+        { clusterName: "" },
+        { cloudName: { $exists: false } },
+        { cloudName: null },
+        { cloudName: "" }
+      ]
+    },
+    { _id: 1 }
+  ).lean();
+
+  if (legacyUsers.length === 0) {
+    return;
+  }
+
+  // Start from trusted counters derived from currently assigned users.
+  await syncClusterUsageFromUsers();
+
+  for (const legacyUser of legacyUsers) {
+    const assignedCluster = await reserveNextClusterSlot();
+    if (!assignedCluster) {
+      throw new Error("No cluster capacity available for legacy users");
+    }
+
+    await User.findByIdAndUpdate(legacyUser._id, {
+      $set: {
+        clusterName: assignedCluster.clusterName,
+        cloudName: assignedCluster.cloudName,
+        storageLimitMB: STORAGE_LIMIT_MB,
+        storageLimit: STORAGE_LIMIT_BYTES
+      }
+    });
+  }
+};
+
 const buildUserResponse = (user) => ({
   id: user._id,
   name: user.username,
@@ -67,6 +121,107 @@ const buildUserResponse = (user) => ({
   storageUsed: user.storageUsed,
   storageLimit: user.storageLimit
 });
+
+const createUserWithAvailableCluster = async ({ username, email, hashedPassword }) => {
+  await assignLegacyUsersWithoutCluster();
+
+  let assignedCluster = null;
+  let userCreated = false;
+
+  try {
+    assignedCluster = await reserveNextClusterSlot();
+
+    if (!assignedCluster) {
+      return {
+        user: null,
+        status: 503,
+        message: "No cluster capacity available"
+      };
+    }
+
+    const user = await User.create({
+      username,
+      email,
+      password: hashedPassword,
+      clusterName: assignedCluster.clusterName,
+      cloudName: assignedCluster.cloudName,
+      storageUsedMB: 0,
+      storageLimitMB: STORAGE_LIMIT_MB,
+      storageUsed: 0,
+      storageLimit: STORAGE_LIMIT_BYTES
+    });
+
+    userCreated = true;
+    return { user, status: 201 };
+  } catch (error) {
+    if (assignedCluster && !userCreated) {
+      await Cluster.findOneAndUpdate(
+        { _id: assignedCluster._id, currentUsers: { $gt: 0 } },
+        { $inc: { currentUsers: -1 } }
+      );
+    }
+    throw error;
+  }
+};
+
+const fetchGoogleTokenInfo = (credential) =>
+  new Promise((resolve, reject) => {
+    const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`;
+
+    https
+      .get(url, (response) => {
+        let rawData = "";
+
+        response.on("data", (chunk) => {
+          rawData += chunk;
+        });
+
+        response.on("end", () => {
+          let parsed = {};
+
+          try {
+            parsed = JSON.parse(rawData || "{}");
+          } catch {
+            reject(new Error("Invalid response from Google token validation"));
+            return;
+          }
+
+          if (response.statusCode !== 200) {
+            const message = parsed.error_description || parsed.error || "Invalid Google credential";
+            reject(new Error(message));
+            return;
+          }
+
+          resolve(parsed);
+        });
+      })
+      .on("error", (error) => {
+        reject(error);
+      });
+  });
+
+const verifyGoogleCredential = async (credential) => {
+  if (!credential) {
+    throw new Error("Google credential is required");
+  }
+
+  const tokenInfo = await fetchGoogleTokenInfo(credential);
+  const expectedClientId = (process.env.GOOGLE_CLIENT_ID || "").trim();
+
+  if (expectedClientId && tokenInfo.aud !== expectedClientId) {
+    throw new Error("Google client ID mismatch");
+  }
+
+  if (tokenInfo.email_verified !== "true") {
+    throw new Error("Google account email is not verified");
+  }
+
+  if (!tokenInfo.email) {
+    throw new Error("Google account does not include an email");
+  }
+
+  return tokenInfo;
+};
 
 exports.register = async (req, res) => {
   const { username, email, password } = req.body;
@@ -90,58 +245,27 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Keep cluster counters aligned with real user assignments.
-    await syncClusterUsageFromUsers();
-
     const hashedPassword = await bcrypt.hash(password, 10);
+    const createdUserResult = await createUserWithAvailableCluster({
+      username: normalizedUsername,
+      email: normalizedEmail,
+      hashedPassword
+    });
 
-    let assignedCluster = null;
-    let userCreated = false;
-
-    try {
-      assignedCluster = await Cluster.findOneAndUpdate(
-        { $expr: { $lt: ["$currentUsers", "$maxUsers"] } },
-        { $inc: { currentUsers: 1 } },
-        {
-          sort: { currentUsers: 1, _id: 1 },
-          new: true
-        }
-      );
-
-      if (!assignedCluster) {
-        return res.status(503).json({
-          success: false,
-          message: "No cluster capacity available"
-        });
-      }
-
-      const user = await User.create({
-        username: normalizedUsername,
-        email: normalizedEmail,
-        password: hashedPassword,
-        clusterName: assignedCluster.clusterName,
-        cloudName: assignedCluster.cloudName,
-        storageUsedMB: 0,
-        storageLimitMB: STORAGE_LIMIT_MB,
-        storageUsed: 0,
-        storageLimit: STORAGE_LIMIT_BYTES
+    if (!createdUserResult.user) {
+      return res.status(createdUserResult.status).json({
+        success: false,
+        message: createdUserResult.message
       });
-      userCreated = true;
-
-      return res.status(201).json({
-        success: true,
-        token: generateToken(user._id),
-        user: buildUserResponse(user)
-      });
-    } catch (error) {
-      if (assignedCluster && !userCreated) {
-        await Cluster.findOneAndUpdate(
-          { _id: assignedCluster._id, currentUsers: { $gt: 0 } },
-          { $inc: { currentUsers: -1 } }
-        );
-      }
-      throw error;
     }
+
+    const user = createdUserResult.user;
+
+    return res.status(201).json({
+      success: true,
+      token: generateToken(user._id),
+      user: buildUserResponse(user)
+    });
   } catch (error) {
     if (error && error.code === 11000) {
       return res.status(409).json({
@@ -197,6 +321,62 @@ exports.login = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Server error"
+    });
+  }
+};
+
+exports.googleLogin = async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({
+        success: false,
+        message: "Google credential is required"
+      });
+    }
+
+    const googleProfile = await verifyGoogleCredential(credential);
+    const normalizedEmail = googleProfile.email.trim().toLowerCase();
+    const fallbackUsername = normalizedEmail.split("@")[0];
+    const normalizedUsername = (
+      googleProfile.name ||
+      googleProfile.given_name ||
+      fallbackUsername
+    ).trim();
+
+    let user = await User.findOne({ email: normalizedEmail });
+
+    if (!user) {
+      const randomPassword = crypto.randomBytes(32).toString("hex");
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+      const createdUserResult = await createUserWithAvailableCluster({
+        username: normalizedUsername,
+        email: normalizedEmail,
+        hashedPassword
+      });
+
+      if (!createdUserResult.user) {
+        return res.status(createdUserResult.status).json({
+          success: false,
+          message: createdUserResult.message
+        });
+      }
+
+      user = createdUserResult.user;
+    }
+
+    return res.json({
+      success: true,
+      token: generateToken(user._id),
+      user: buildUserResponse(user)
+    });
+  } catch (error) {
+    console.error("google login error:", error.message);
+    return res.status(401).json({
+      success: false,
+      message: "Google sign-in failed"
     });
   }
 };

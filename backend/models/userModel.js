@@ -1,4 +1,5 @@
-const mongoose = require("mongoose");
+const path = require("path");
+const mongoose = require(require.resolve("mongoose", { paths: [path.join(__dirname, "..")] }));
 
 const userSchema = new mongoose.Schema(
   {

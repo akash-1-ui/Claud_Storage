@@ -110,9 +110,11 @@
 .dashboard {
   display: flex;
   min-height: 100vh;
+  height: 100vh;
   background: #f5f7fb;
   max-width: 1400px;
   margin: 0 auto;
+  overflow: hidden;
 }
 
 /* SIDEBAR */
@@ -121,6 +123,11 @@
   background: #111827;
   color: white;
   padding: 20px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  flex-shrink: 0;
 }
 
 .logo {
@@ -177,9 +184,13 @@
 /* MAIN CONTENT */
 .main-content {
   flex: 1;
+  min-width: 0;
   padding: 20px 30px;
   max-width: 1200px;
   margin: 0 auto;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* HEADER */
@@ -882,6 +893,7 @@ td button:nth-child(7):hover {
   .dashboard {
     flex-direction: column;
     height: auto;
+    overflow: visible;
   }
 
   .sidebar {
@@ -894,6 +906,10 @@ td button:nth-child(7):hover {
     flex-wrap: wrap;
     border-bottom: 1px solid #e5e7eb;
     border-right: none;
+    position: static;
+    top: auto;
+    height: auto;
+    overflow: visible;
   }
 
   .sidebar.dark {
@@ -945,6 +961,8 @@ td button:nth-child(7):hover {
   .main-content {
     width: 100%;
     padding: 16px;
+    height: auto;
+    overflow: visible;
   }
 
   .grid-view {
