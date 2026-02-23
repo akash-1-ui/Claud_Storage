@@ -71,6 +71,18 @@ const reserveNextClusterSlot = async () =>
     }
   );
 
+const reserveNextClusterSlotWithSelfHeal = async () => {
+  let assignedCluster = await reserveNextClusterSlot();
+  if (assignedCluster) {
+    return assignedCluster;
+  }
+
+  // Handle out-of-band DB edits (e.g., manual user deletes) that can stale counters.
+  await syncClusterUsageFromUsers();
+  assignedCluster = await reserveNextClusterSlot();
+  return assignedCluster;
+};
+
 const assignLegacyUsersWithoutCluster = async () => {
   const legacyUsers = await User.find(
     {
@@ -129,7 +141,7 @@ const createUserWithAvailableCluster = async ({ username, email, hashedPassword 
   let userCreated = false;
 
   try {
-    assignedCluster = await reserveNextClusterSlot();
+    assignedCluster = await reserveNextClusterSlotWithSelfHeal();
 
     if (!assignedCluster) {
       return {
@@ -475,6 +487,46 @@ exports.changePassword = async (req, res) => {
     });
   } catch (error) {
     console.error("changePassword error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+exports.deleteAccount = async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    // Get user first to update cluster count
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Delete all files associated with the user
+    await File.deleteMany({ userId: String(userId) });
+
+    // Delete the user account
+    await User.findByIdAndDelete(userId);
+
+    // Update cluster currentUsers count
+    if (user.clusterName && user.cloudName) {
+      await Cluster.findOneAndUpdate(
+        { clusterName: user.clusterName, cloudName: user.cloudName },
+        { $inc: { currentUsers: -1 } }
+      );
+    }
+
+    return res.json({
+      success: true,
+      message: "Account deleted successfully"
+    });
+  } catch (error) {
+    console.error("deleteAccount error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error"

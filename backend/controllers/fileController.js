@@ -151,9 +151,9 @@ exports.uploadFile = async (req, res) => {
         .parse(file.originalname)
         .name.replace(/[^a-zA-Z0-9_-]/g, "_")
         .slice(0, 80) || "file";
-
+    const clusterFolder = String(assignedCluster.clusterName || "unassigned").replace(/[^a-zA-Z0-9_-]/g, "_");
     const uploadResult = await uploadBufferToCloudinary(assignedCluster, file.buffer, {
-      folder: `users/${req.userId}`,
+      folder: `clusters/${clusterFolder}/users/${req.userId}`,
       resource_type: "auto",
       public_id: `${Date.now()}_${sanitizedName}`,
       timeout: 120000

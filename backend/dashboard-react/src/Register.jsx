@@ -13,48 +13,9 @@ function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
-  const showRegistrationSuccessMessage = () => {
-    const messageDiv = document.createElement("div");
-    messageDiv.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: linear-gradient(135deg, #10b981, #059669);
-      color: white;
-      padding: 30px 50px;
-      borderRadius: 20px;
-      fontSize: 18px;
-      fontWeight: 600;
-      zIndex: 9999;
-      boxShadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-      animation: slideInScale 0.4s ease-out, fadeOutScale 0.4s ease-in 2.6s forwards;
-      textAlign: center;
-    `;
-    messageDiv.textContent = "Successfully Registered";
-    document.body.appendChild(messageDiv);
-
-    const style = document.createElement("style");
-    style.textContent = `
-      @keyframes slideInScale {
-        0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
-        100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-      }
-      @keyframes fadeOutScale {
-        0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-        100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
-      }
-    `;
-    document.head.appendChild(style);
-  };
-
-  const handleAuthSuccess = (data, showSuccessMessage = false) => {
+  const handleAuthSuccess = (data) => {
     localStorage.setItem("token", data.token);
     localStorage.setItem("userName", data.user.name);
-
-    if (showSuccessMessage) {
-      showRegistrationSuccessMessage();
-    }
 
     setShowLoader(true);
     setTimeout(() => {
@@ -75,7 +36,7 @@ function Register() {
 
       const data = await res.json();
       if (data.token) {
-        handleAuthSuccess(data, true);
+        handleAuthSuccess(data);
       } else {
         alert("Registration failed: " + (data.message || "Please try again"));
         setLoading(false);

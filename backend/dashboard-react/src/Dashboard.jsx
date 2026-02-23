@@ -264,132 +264,84 @@ useEffect(() => {
 
   const handleFileUpload = async (files) => {
     const token = localStorage.getItem("token");
-    const userName = localStorage.getItem('userName') || 'user';
-    
+
     if (!token) {
-      showNotification('❌ No authentication token found. Please log in again.');
+      showNotification("No authentication token found. Please log in again.");
       return;
     }
-
-    console.log("🚀 Starting Cloudinary upload. Files:", files.length);
 
     let uploaded = 0;
     let successful = 0;
     let failed = 0;
     setUploadProgress(0);
-    setUploadStatus('Uploading...');
+    setUploadStatus("Uploading...");
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      console.log(`\n📤 [${i + 1}/${files.length}] Uploading: ${file.name} (${(file.size / 1048576).toFixed(2)}MB)`);
-
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', 'course_uploads');
+      formData.append("file", file);
 
       try {
-        // Determine upload endpoint based on file type
-        let uploadUrl = 'https://api.cloudinary.com/v1_1/dzgccprpv/image/upload';
-        if (file.type.startsWith('video/')) {
-          uploadUrl = 'https://api.cloudinary.com/v1_1/dzgccprpv/video/upload';
-        } else if (file.type === 'application/pdf' || file.type.startsWith('application/')) {
-          uploadUrl = 'https://api.cloudinary.com/v1_1/dzgccprpv/raw/upload';
-        }
-
-        console.log(`📨 Uploading to: ${uploadUrl}`);
-        console.log(`📋 Sending: ${file.name} with preset cloudbox_unsigned`);
-
-        const cloudRes = await fetch(uploadUrl, {
-          method: 'POST',
+        const uploadRes = await fetch(API_ENDPOINTS.FILES.UPLOAD, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
           body: formData,
         });
 
-        const cloudData = await cloudRes.json();
-        console.log(`📊 Response status: ${cloudRes.status} ${cloudRes.statusText}`);
-        console.log(`📊 Response data:`, cloudData);
-        
-        if (!cloudRes.ok) {
-          console.error(`❌ Cloudinary error (${cloudRes.status}):`, JSON.stringify(cloudData, null, 2));
-          failed++;
-          const errorMsg = cloudData.error?.message || cloudData.message || `HTTP ${cloudRes.status}`;
-          showNotification(`❌ ${file.name}: ${errorMsg}`);
-          continue;
-        }
-
-        if (!cloudData.secure_url) {
-          console.error(`❌ No secure_url in response:`, cloudData);
-          failed++;
-          showNotification(`❌ ${file.name}: Response missing file URL`);
-          continue;
-        }
-
-        console.log(`✅ Cloudinary upload OK: ${cloudData.secure_url}`);
-        console.log(`💾 Saving to database...`);
-        
+        let uploadData = {};
+        let rawErrorText = "";
         try {
-          const saveRes = await fetch(API_ENDPOINTS.FILES.SAVE_FILE, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              fileName: file.name,
-              fileURL: cloudData.secure_url,
-              fileSize: file.size,
-              cloudinaryPublicId: cloudData.public_id || 'unknown'
-            }),
-          });
-
-          const saveData = await saveRes.json();
-          
-          if (!saveRes.ok) {
-            console.error(`❌ Database save failed (${saveRes.status}):`, saveData);
-            failed++;
-            showNotification(`⚠️ ${file.name} uploaded but save failed: ${saveData.message}`);
-            continue;
+          uploadData = await uploadRes.json();
+        } catch {
+          try {
+            rawErrorText = (await uploadRes.text()) || "";
+          } catch {
+            rawErrorText = "";
           }
-
-          successful++;
-          console.log(`✅ Saved successfully`);
-          showNotification(`✅ ${file.name} uploaded!`, 'success');
-
-        } catch (saveErr) {
-          console.error(`❌ Save exception:`, saveErr.message);
-          failed++;
-          showNotification(`❌ ${file.name}: ${saveErr.message}`);
         }
 
+        if (!uploadRes.ok || !uploadData.success) {
+          failed++;
+          const errorMessage =
+            uploadData.error ||
+            uploadData.message ||
+            rawErrorText ||
+            "Upload failed";
+          showNotification(`${file.name}: ${errorMessage}`);
+          uploaded++;
+          setUploadProgress(Math.round((uploaded / files.length) * 100));
+          continue;
+        }
+
+        successful++;
+        showNotification(`${file.name} uploaded!`, "success");
       } catch (uploadErr) {
-        console.error(`❌ Upload exception:`, uploadErr);
         failed++;
-        showNotification(`❌ ${file.name}: ${uploadErr.message}`);
+        showNotification(`${file.name}: ${uploadErr.message}`);
       }
-      
+
       uploaded++;
       setUploadProgress(Math.round((uploaded / files.length) * 100));
     }
 
-    console.log(`\n📊 Complete - Success: ${successful}, Failed: ${failed}, Total: ${files.length}`);
-
-    // Refresh files
     await fetchFiles();
     await fetchProfile();
-    
-    // Show status
-    let statusMsg = '';
+
+    let statusMsg = "";
     if (successful > 0 && failed === 0) {
-      statusMsg = `✅ ${successful} uploaded`;
+      statusMsg = `${successful} uploaded`;
     } else if (successful > 0) {
-      statusMsg = `⚠️ ${successful}/${files.length} uploaded`;
+      statusMsg = `${successful}/${files.length} uploaded`;
     } else {
-      statusMsg = `❌ ${failed} failed`;
+      statusMsg = `${failed} failed`;
     }
-    
+
     setUploadStatus(statusMsg);
     setTimeout(() => {
       setUploadProgress(0);
-      setUploadStatus('');
+      setUploadStatus("");
     }, 3500);
   };
 
@@ -639,6 +591,50 @@ useEffect(() => {
     } catch (err) {
       console.error('Error changing password:', err);
       showNotification('Error changing password');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted."
+    );
+    
+    if (!confirmDelete) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      showNotification('Session expired. Please log in again.');
+      navigate('/login');
+      return;
+    }
+
+    try {
+      const response = await fetch(API_ENDPOINTS.AUTH.DELETE_ACCOUNT, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (response.ok && data.success) {
+        showNotification('Account deleted successfully!', 'success');
+        localStorage.clear();
+        setTimeout(() => {
+          navigate('/intro');
+        }, 1500);
+      } else {
+        showNotification(data.message || 'Failed to delete account');
+      }
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      showNotification('Error deleting account');
     }
   };
 
@@ -1011,27 +1007,31 @@ useEffect(() => {
           <div
             style={{
               position: 'fixed',
-              top: '18px',
-              right: '18px',
+              bottom: '24px',
+              left: '50%',
+              transform: 'translateX(-50%)',
               zIndex: 3000,
               display: 'flex',
               flexDirection: 'column',
               gap: '10px',
-              maxWidth: '340px'
+              maxWidth: '400px',
+              width: '90%'
             }}
           >
             {notifications.map((n) => (
               <div
                 key={n.id}
                 style={{
-                  padding: '10px 12px',
-                  borderRadius: '8px',
+                  padding: '14px 20px',
+                  borderRadius: '16px',
                   border: `1px solid ${n.type === 'success' ? '#10b981' : '#ef4444'}`,
                   background: n.type === 'success' ? '#ecfdf5' : '#fef2f2',
                   color: n.type === 'success' ? '#065f46' : '#991b1b',
-                  boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
-                  fontSize: '13px',
-                  fontWeight: 500
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  textAlign: 'center',
+                  backdropFilter: 'blur(8px)'
                 }}
               >
                 {n.message}
@@ -2074,9 +2074,12 @@ useEffect(() => {
                   Username: <strong>{userName}</strong>
                 </p>
                 <button onClick={() => setShowPasswordModal(true)} style={{padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', marginTop: '8px'}}>
-                  Change Password
+                    Change Password
+                  </button>
+                <button onClick={handleDeleteAccount} style={{padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', marginTop: '8px'}}>
+                  Delete Account
                 </button>
-              </div>
+                </div>
 
             </div>
           </section>
