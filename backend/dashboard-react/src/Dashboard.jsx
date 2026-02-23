@@ -2073,12 +2073,17 @@ useEffect(() => {
                 <p style={{fontSize: '14px', color: '#6b7280', marginBottom: '8px'}}>
                   Username: <strong>{userName}</strong>
                 </p>
-                <button onClick={() => setShowPasswordModal(true)} style={{padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', marginTop: '8px'}}>
+                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '10px', marginTop: '8px'}}>
+                  <button onClick={() => setShowPasswordModal(true)} style={{padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'}}>
                     Change Password
                   </button>
-                <button onClick={handleDeleteAccount} style={{padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', marginTop: '8px'}}>
-                  Delete Account
-                </button>
+                  <p style={{fontSize: '13px', color: isDarkMode ? '#9ca3af' : '#6b7280', lineHeight: 1.5, margin: 0, maxWidth: '560px'}}>
+                    Terms & Conditions: Deleting your account will permanently remove your account and all stored data, including uploaded files. This action cannot be undone.
+                  </p>
+                  <button onClick={handleDeleteAccount} style={{padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'}}>
+                    Delete Account
+                  </button>
+                </div>
                 </div>
 
             </div>
