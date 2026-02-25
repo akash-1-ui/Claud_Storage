@@ -10,6 +10,27 @@ import NeonCheckbox from "./columnbox";
 import Hamster from "./css/Hamster";
 import Uploadloader from "./css/Uploadloader";
 
+const formatDateTime = (value) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Unknown";
+  }
+  return parsed.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+};
+
+const formatQueuedSize = (bytes) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+};
+
 function Dashboard() {
   const navigate = useNavigate();
   const chartRef = useRef(null);
@@ -21,6 +42,8 @@ function Dashboard() {
   const [currentFolder, setCurrentFolder] = useState('Home');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('name');
+  const [filterMode, setFilterMode] = useState('all');
+  const [selectedFilterType, setSelectedFilterType] = useState('all');
   const [userProfile, setUserProfile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -45,6 +68,9 @@ function Dashboard() {
   const [showCurrentPass, setShowCurrentPass] = useState(false);
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [selectedFileDetails, setSelectedFileDetails] = useState(null);
+  const [isUploadBoxExpanded, setIsUploadBoxExpanded] = useState(true);
+  const [queuedUploadFiles, setQueuedUploadFiles] = useState([]);
 
   const fetchProfile = async () => {
     const token = localStorage.getItem("token");
@@ -264,21 +290,60 @@ useEffect(() => {
     showNotification(isFavorited ? 'Removed from favorites' : 'Added to favorites', 'success');
   };
 
+  const openFileDetailsModal = (file) => {
+    if (!file) return;
+    setSelectedFileDetails(file);
+  };
+
+  const closeFileDetailsModal = () => {
+    setSelectedFileDetails(null);
+  };
+
+  const queueSelectedFiles = (incomingFiles) => {
+    const selected = Array.from(incomingFiles || []).filter(Boolean);
+    if (selected.length === 0) return;
+
+    setIsUploadBoxExpanded(true);
+
+    setQueuedUploadFiles((previous) => {
+      const seen = new Set(previous.map((file) => `${file.name}-${file.size}-${file.lastModified}`));
+      const uniqueToAdd = selected.filter((file) => {
+        const key = `${file.name}-${file.size}-${file.lastModified}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      return [...previous, ...uniqueToAdd];
+    });
+  };
+
+  const removeQueuedFile = (indexToRemove) => {
+    setQueuedUploadFiles((previous) => previous.filter((_, index) => index !== indexToRemove));
+  };
+
 
   const handleFileUpload = async (files) => {
     const filesToUpload = Array.from(files || []).filter(Boolean);
-    if (filesToUpload.length === 0) return;
+    if (filesToUpload.length === 0) {
+      return { successful: 0, failed: 0, failedFiles: [] };
+    }
 
     const token = localStorage.getItem("token");
 
     if (!token) {
       showNotification("No authentication token found. Please log in again.");
-      return;
+      return {
+        successful: 0,
+        failed: filesToUpload.length,
+        failedFiles: filesToUpload
+      };
     }
 
     let uploaded = 0;
     let successful = 0;
     let failed = 0;
+    const failedFiles = [];
     setIsUploading(true);
     setUploadProgress(0);
     setUploadStatus("Uploading...");
@@ -312,6 +377,7 @@ useEffect(() => {
 
           if (!uploadRes.ok || !uploadData.success) {
             failed++;
+            failedFiles.push(file);
             const errorMessage =
               uploadData.error ||
               uploadData.message ||
@@ -327,6 +393,7 @@ useEffect(() => {
           showNotification(`${file.name} uploaded successfully.`, "success");
         } catch (uploadErr) {
           failed++;
+          failedFiles.push(file);
           showNotification(`${file.name}: ${uploadErr.message}`);
         }
 
@@ -347,6 +414,7 @@ useEffect(() => {
       }
 
       setUploadStatus(statusMsg);
+      return { successful, failed, failedFiles };
     } finally {
       setIsUploading(false);
       setTimeout(() => {
@@ -354,6 +422,14 @@ useEffect(() => {
         setUploadStatus("");
       }, 3500);
     }
+  };
+
+  const handleProceedUpload = async () => {
+    if (isUploading || queuedUploadFiles.length === 0) return;
+
+    const result = await handleFileUpload(queuedUploadFiles);
+    const remaining = result?.failedFiles || [];
+    setQueuedUploadFiles(remaining);
   };
 
   const showNotification = (message, type = 'error', force = false) => {
@@ -459,6 +535,10 @@ useEffect(() => {
 
   const handleDelete = async (file) => {
     if (!confirm(`Are you sure you want to delete "${file.name}"?`)) return;
+
+    if (selectedFileDetails && selectedFileDetails._id === file._id) {
+      setSelectedFileDetails(null);
+    }
 
     const fileName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
     const trashedKey = `trashed_${fileName}`;
@@ -825,15 +905,38 @@ useEffect(() => {
   };
 
   const handleFileInput = (e) => {
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    handleFileUpload(files);
+    queueSelectedFiles(files);
     e.target.value = "";
   };
 
-  const filteredFiles = files.filter(file =>
-    file.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const availableFileTypes = Array.from(
+    new Set(files.map((file) => file.type).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  useEffect(() => {
+    if (filterMode === 'all') {
+      if (selectedFilterType !== 'all') {
+        setSelectedFilterType('all');
+      }
+      return;
+    }
+
+    if (selectedFilterType !== 'all' && availableFileTypes.includes(selectedFilterType)) {
+      return;
+    }
+
+    setSelectedFilterType(availableFileTypes[0] || 'all');
+  }, [filterMode, selectedFilterType, availableFileTypes]);
+
+  const filteredFiles = files.filter((file) => {
+    const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType =
+      filterMode === 'all' ||
+      (selectedFilterType !== 'all' && file.type === selectedFilterType);
+    return matchesSearch && matchesType;
+  });
 
   const sortedFiles = [...filteredFiles].sort((a, b) => {
     switch (sortBy) {
@@ -939,11 +1042,26 @@ useEffect(() => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [isHamburgerOpen]);
 
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") {
+        setSelectedFileDetails(null);
+      }
+    };
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, []);
+
   const handleDrop = (e) => {
     e.preventDefault();
     const files = Array.from(e.dataTransfer.files);
-    handleFileUpload(files);
+    queueSelectedFiles(files);
   };
+
+  const selectedIsFavorite = selectedFileDetails
+    ? favorites.some((fav) => fav._id === selectedFileDetails._id)
+    : false;
 
   return (
     <div className={`dashboard${isDarkMode ? ' dark' : ''}`}> 
@@ -1056,9 +1174,9 @@ useEffect(() => {
             />
             {activeSection === 'files' && (
               <div className="header-filter">
-                <label htmlFor="file-filter-select">Filter:</label>
+                <label htmlFor="file-sort-select">Sort:</label>
                 <select
-                  id="file-filter-select"
+                  id="file-sort-select"
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
                 >
@@ -1066,6 +1184,35 @@ useEffect(() => {
                   <option value="type">Type</option>
                   <option value="size">Size</option>
                 </select>
+
+                <label htmlFor="file-filter-mode-select">Filter:</label>
+                <select
+                  id="file-filter-mode-select"
+                  value={filterMode}
+                  onChange={(e) => setFilterMode(e.target.value)}
+                >
+                  <option value="all">All Files</option>
+                  <option value="specific">Specific Type</option>
+                </select>
+
+                {filterMode === 'specific' && (
+                  <select
+                    id="file-filter-type-select"
+                    value={selectedFilterType}
+                    onChange={(e) => setSelectedFilterType(e.target.value)}
+                    disabled={availableFileTypes.length === 0}
+                  >
+                    {availableFileTypes.length === 0 ? (
+                      <option value="all">No file types</option>
+                    ) : (
+                      availableFileTypes.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                )}
               </div>
             )}
           </div>
@@ -1515,16 +1662,19 @@ useEffect(() => {
               <h2>All Files</h2>
               <div className="sort-options">
                 {/* Select Checkbox */}
-                <div style={{display: 'flex', alignItems: 'center', gap: '8px', margin: '0 12px'}}>
-                  <Checkbox 
-                    checked={selectMode}
-                    onChange={() => {
-                      setSelectMode(!selectMode);
-                      setSelectedFileIds([]);
-                    }}
-                    id="select-mode-checkbox"
-                  />
-                  <label htmlFor="select-mode-checkbox" style={{fontSize: '14px', fontWeight: 500, color: selectMode ? '#3b82f6' : '#374151', cursor: 'pointer', userSelect: 'none'}}>Select</label>
+                <div className="select-mode-toggle-wrap">
+                  <label className="select-mode-toggle" htmlFor="select-mode-checkbox">
+                    <input
+                      id="select-mode-checkbox"
+                      type="checkbox"
+                      checked={selectMode}
+                      onChange={() => {
+                        setSelectMode(!selectMode);
+                        setSelectedFileIds([]);
+                      }}
+                    />
+                    <span className="select-mode-label">Select</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -1606,16 +1756,76 @@ useEffect(() => {
             )}
 
             {/* Drag & Drop Upload Zone */}
-            <div 
-              className="upload-zone" 
-              onDrop={handleDrop} 
-              onDragOver={(e) => e.preventDefault()}
-              onClick={() => document.getElementById('file-upload-input').click()}
-              style={{cursor: 'pointer'}}
-            >
-              <Hamster />
-              <p>Drag & drop files here or click to upload</p>
-              <label htmlFor="file-upload-input" style={{display:'none'}}>Upload file</label>
+            <section className="upload-box-wrap">
+              <div className="upload-box-topline">
+                <h3 className="upload-box-heading">Upload Box</h3>
+                <button
+                  type="button"
+                  className="upload-box-toggle-btn"
+                  onClick={() => setIsUploadBoxExpanded((prev) => !prev)}
+                >
+                  {isUploadBoxExpanded ? "Collapse" : "Expand"}
+                </button>
+              </div>
+
+              {isUploadBoxExpanded && (
+                <>
+                  <div
+                    className="upload-zone"
+                    onDrop={handleDrop}
+                    onDragOver={(e) => e.preventDefault()}
+                    onClick={() => document.getElementById('file-upload-input').click()}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <Hamster />
+                    <p className="upload-box-subheading">Drag & drop files here or click to upload files</p>
+                  </div>
+
+                  {queuedUploadFiles.length > 0 && (
+                    <div className="upload-queue-container">
+                      <div className="upload-queue-header">
+                        <h4>Listed files to upload</h4>
+                        <span className="upload-queue-count">{queuedUploadFiles.length} file(s) selected</span>
+                      </div>
+
+                      <ul className="upload-queue-list">
+                        {queuedUploadFiles.map((queuedFile, index) => (
+                          <li
+                            key={`${queuedFile.name}-${queuedFile.size}-${queuedFile.lastModified}-${index}`}
+                            className="upload-queue-item"
+                          >
+                            <span className="upload-queue-name" title={queuedFile.name}>
+                              {queuedFile.name}
+                            </span>
+                            <span className="upload-queue-size">{formatQueuedSize(queuedFile.size)}</span>
+                            <button
+                              type="button"
+                              className="upload-queue-remove"
+                              onClick={() => removeQueuedFile(index)}
+                              aria-label={`Remove ${queuedFile.name}`}
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <div className="upload-queue-footer">
+                        <button
+                          type="button"
+                          className="upload-panel-btn primary"
+                          onClick={handleProceedUpload}
+                          disabled={isUploading || queuedUploadFiles.length === 0}
+                        >
+                          Proceed to Upload
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <label htmlFor="file-upload-input" style={{ display: 'none' }}>Upload file</label>
               <input
                 id="file-upload-input"
                 name="file-upload"
@@ -1624,7 +1834,7 @@ useEffect(() => {
                 style={{ display: 'none' }}
                 onChange={handleFileInput}
               />
-            </div>
+            </section>
 
             {/* Files View */}
             {(isUploading || uploadStatus) && (
@@ -1755,9 +1965,6 @@ useEffect(() => {
                                                     <div className="file-icon">📄</div>
                                                   )}
                                                 </div>
-                                                <div className="file-info">
-                                                  <p title={file.name}>{file.name}</p>
-                                                </div>
                                               </div>
                                             );
                                           })}
@@ -1778,56 +1985,38 @@ useEffect(() => {
                                   <div 
                                     key={index} 
                                     className="file-item"
+                                    onClick={() => openFileDetailsModal(file)}
                                     style={{
                                       position: 'relative',
                                       opacity: isSelected ? 0.8 : 1,
                                       border: isSelected ? '2px solid #3b82f6' : 'none',
                                       borderRadius: '8px',
-                                      overflow: 'hidden'
+                                      overflow: 'hidden',
+                                      cursor: 'pointer'
                                     }}
                                   >
                                     <div style={{position: 'relative'}}>
                                       {file.isImage ? (
-                                        <img src={file.url} alt={file.name} className="file-thumb" onClick={() => window.open(file.url, '_blank')} style={{cursor: 'pointer'}} />
+                                        <img src={file.url} alt={file.name} className="file-thumb" />
                                       ) : file.isVideo ? (
-                                        <video src={file.url} className="file-thumb" style={{cursor: 'pointer'}} onClick={() => window.open(file.url, '_blank')} />
+                                        <video src={file.url} className="file-thumb" muted />
                                       ) : (
                                         <div className="file-icon">📄</div>
                                       )}
                                       <button
-                                        onClick={() => handleToggleFavorite(file)}
-                                        style={{
-                                          position: 'absolute',
-                                          top: '8px',
-                                          right: '8px',
-                                          background: 'rgba(255,255,255,0.9)',
-                                          border: 'none',
-                                          borderRadius: '50%',
-                                          width: '32px',
-                                          height: '32px',
-                                          fontSize: '18px',
-                                          cursor: 'pointer',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          transition: 'all 0.2s ease',
-                                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          handleToggleFavorite(file);
                                         }}
+                                        className={`favorite-toggle-btn${isFavorited ? ' active' : ''}`}
                                         title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
                                       >
-                                        {isFavorited ? '❤️' : '🤍'}
+                                        <svg className="favorite-heart-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 16.5 3C19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                                        </svg>
                                       </button>
-                                    </div>
-                                    <div className="file-info">
-                                      <p title={file.name}>{file.name}</p>
-                                    </div>
-                                    <div className="file-actions">
-                                      <button onClick={() => handleDownload(file)} title="Download">⬇</button>
-                                      <button onClick={() => handleShare(file)} title="Share">↗</button>
-                                      <button onClick={() => handleRename(file)} title="Rename">✏</button>
-                                      <button onClick={() => handleDelete(file)} title="Delete">🗑</button>
-                                    </div>
-                                  </div>
+                                    </div></div>
                                 );
                               })}
                             </div>
@@ -1905,57 +2094,40 @@ useEffect(() => {
                 {favorites.map((file, index) => {
                   const isSelected = selectedFileIds.includes(file._id);
                   return (
-                    <div 
-                      key={index} 
+                    <div
+                      key={index}
                       className="file-item"
+                      onClick={() => openFileDetailsModal(file)}
                       style={{
                         position: 'relative',
                         opacity: isSelected ? 0.8 : 1,
                         border: isSelected ? '2px solid #3b82f6' : 'none',
                         borderRadius: '8px',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        cursor: 'pointer'
                       }}
                     >
                       <div style={{position: 'relative'}}>
                         {file.isImage ? (
-                          <img src={file.url} alt={file.name} className="file-thumb" onClick={() => window.open(file.url, '_blank')} style={{cursor: 'pointer'}} />
+                          <img src={file.url} alt={file.name} className="file-thumb" />
                         ) : file.isVideo ? (
-                          <video src={file.url} className="file-thumb" style={{cursor: 'pointer'}} onClick={() => window.open(file.url, '_blank')} />
+                          <video src={file.url} className="file-thumb" muted />
                         ) : (
-                          <div className="file-icon">📄</div>
+                          <div className="file-icon">{"\uD83D\uDCC4"}</div>
                         )}
                         <button
-                          onClick={() => handleToggleFavorite(file)}
-                          style={{
-                            position: 'absolute',
-                            top: '8px',
-                            right: '8px',
-                            background: 'rgba(255,255,255,0.9)',
-                            border: 'none',
-                            borderRadius: '50%',
-                            width: '32px',
-                            height: '32px',
-                            fontSize: '18px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.2s ease',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleToggleFavorite(file);
                           }}
+                          className="favorite-toggle-btn active"
                           title="Remove from favorites"
                         >
-                          ❤️
+                          <svg className="favorite-heart-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 16.5 3C19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                          </svg>
                         </button>
-                      </div>
-                      <div className="file-info">
-                        <p title={file.name}>{file.name}</p>
-                      </div>
-                      <div className="file-actions">
-                        <button onClick={() => handleDownload(file)} title="Download">⬇</button>
-                        <button onClick={() => handleShare(file)} title="Share">↗</button>
-                        <button onClick={() => handleRename(file)} title="Rename">✏</button>
-                        <button onClick={() => handleDelete(file)} title="Delete">🗑</button>
                       </div>
                     </div>
                   );
@@ -2099,6 +2271,82 @@ useEffect(() => {
 
             </div>
           </section>
+        )}
+
+        {selectedFileDetails && (
+          <div className="file-details-overlay" onClick={closeFileDetailsModal}>
+            <div
+              className={`file-details-modal${isDarkMode ? ' dark' : ''}`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="file-details-header">
+                <h3>File Details</h3>
+                <button type="button" onClick={closeFileDetailsModal} className="file-details-close">
+                  X
+                </button>
+              </div>
+
+              <div className="file-details-preview">
+                {selectedFileDetails.isImage ? (
+                  <img src={selectedFileDetails.url} alt={selectedFileDetails.name} />
+                ) : selectedFileDetails.isVideo ? (
+                  <video src={selectedFileDetails.url} controls />
+                ) : (
+                  <div className="file-details-fallback">{"\uD83D\uDCC4"}</div>
+                )}
+              </div>
+
+              <div className="file-details-grid">
+                <div className="file-details-item">
+                  <span>Name</span>
+                  <strong title={selectedFileDetails.name}>{selectedFileDetails.name || "Unknown"}</strong>
+                </div>
+                <div className="file-details-item">
+                  <span>Size</span>
+                  <strong>{selectedFileDetails.size || "Unknown"}</strong>
+                </div>
+                <div className="file-details-item">
+                  <span>Type</span>
+                  <strong>{selectedFileDetails.type || "Unknown"}</strong>
+                </div>
+                <div className="file-details-item">
+                  <span>Uploaded</span>
+                  <strong>{formatDateTime(selectedFileDetails.updatedAt)}</strong>
+                </div>
+                <div className="file-details-item">
+                  <span>Favourite</span>
+                  <strong>{selectedIsFavorite ? "Yes" : "No"}</strong>
+                </div>
+                <div className="file-details-item">
+                  <span>File ID</span>
+                  <strong>{selectedFileDetails._id || "N/A"}</strong>
+                </div>
+              </div>
+
+              <div className="file-details-meta">
+                <span>URL</span>
+                <p>{selectedFileDetails.url || "No URL available"}</p>
+              </div>
+
+              <div className="file-details-actions-row">
+                <button type="button" onClick={() => handleDownload(selectedFileDetails)}>
+                  Download
+                </button>
+                <button type="button" onClick={() => handleShare(selectedFileDetails)}>
+                  Share
+                </button>
+                <button type="button" onClick={() => handleRename(selectedFileDetails)}>
+                  Rename
+                </button>
+                <button type="button" onClick={() => handleDelete(selectedFileDetails)} className="danger">
+                  Delete
+                </button>
+                <button type="button" onClick={() => handleToggleFavorite(selectedFileDetails)}>
+                  {selectedIsFavorite ? "Unfavourite" : "Favourite"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Recent Activity Panel removed for clarity and to avoid fake data */}
