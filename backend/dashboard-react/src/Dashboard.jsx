@@ -441,28 +441,82 @@ useEffect(() => {
     }, 3000);
   };
 
-  const handleDownload = async (file) => {
+  const getDownloadUrl = (rawUrl) => {
+    if (typeof rawUrl !== "string") return "";
+    const trimmedUrl = rawUrl.trim();
+    if (!trimmedUrl) return "";
+
+    if (!trimmedUrl.includes("res.cloudinary.com") || !trimmedUrl.includes("/upload/")) {
+      return trimmedUrl;
+    }
+
+    const [prefix, suffix] = trimmedUrl.split("/upload/");
+    if (!prefix || !suffix || suffix.startsWith("fl_attachment/")) {
+      return trimmedUrl;
+    }
+
+    return `${prefix}/upload/fl_attachment/${suffix}`;
+  };
+
+  const triggerDownload = (url, fileName) => {
+    const link = document.createElement("a");
+    link.href = url;
+    if (fileName) {
+      link.download = fileName;
+    }
+    link.target = "_blank";
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadViaApi = async (fileId, fileName) => {
+    const token = localStorage.getItem("token");
+    const response = await fetch(API_ENDPOINTS.FILES.DOWNLOAD(fileId), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("API download failed");
+    }
+
+    const blob = await response.blob();
+    const objectUrl = window.URL.createObjectURL(blob);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(API_ENDPOINTS.FILES.DOWNLOAD(file._id), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = file.name;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        showNotification('File downloaded successfully!', 'success');
-      } else {
-        showNotification('Failed to download file');
+      triggerDownload(objectUrl, fileName);
+    } finally {
+      window.URL.revokeObjectURL(objectUrl);
+    }
+  };
+
+  const handleDownload = async (file) => {
+    if (!file) {
+      showNotification("File not found");
+      return;
+    }
+
+    const directDownloadUrl = getDownloadUrl(file.url);
+    if (directDownloadUrl) {
+      try {
+        triggerDownload(directDownloadUrl, file.name);
+        showNotification("Download started.", "success");
+        return;
+      } catch (directDownloadError) {
+        console.error("Direct download failed, falling back to API download:", directDownloadError);
       }
+    }
+
+    if (!file._id) {
+      showNotification("Failed to download file");
+      return;
+    }
+
+    try {
+      await downloadViaApi(file._id, file.name);
+      showNotification('File downloaded successfully!', 'success');
     } catch (err) {
       showNotification('Error downloading file');
     }
@@ -824,7 +878,7 @@ useEffect(() => {
         continue;
       }
       try {
-        const res = await fetch(`http://localhost:5000/api/files/${fileId}`, {
+        const res = await fetch(API_ENDPOINTS.FILES.DELETE(fileId), {
           method: 'DELETE',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -863,30 +917,56 @@ useEffect(() => {
       return;
     }
     const filesToDownload = files.filter(f => selectedFileIds.includes(f._id));
+    if (filesToDownload.length === 0) {
+      showNotification('No files found for selected items');
+      return;
+    }
+    let downloaded = 0;
+    let failed = 0;
+
     for (const file of filesToDownload) {
-      try {
-        const token = localStorage.getItem("token");
-        const response = await fetch(`http://localhost:5000/api/files/download/${file._id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (response.ok) {
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = file.name;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
+      let didDownload = false;
+
+      const directDownloadUrl = getDownloadUrl(file.url);
+      if (directDownloadUrl) {
+        try {
+          triggerDownload(directDownloadUrl, file.name);
+          didDownload = true;
+        } catch (directDownloadError) {
+          console.error('Direct bulk download failed, falling back to API download:', directDownloadError);
         }
-      } catch (err) {
-        console.error('Error downloading file:', err);
+      }
+
+      if (!didDownload && file._id) {
+        try {
+          await downloadViaApi(file._id, file.name);
+          didDownload = true;
+        } catch (apiDownloadError) {
+          console.error('Error downloading file:', apiDownloadError);
+        }
+      }
+
+      if (didDownload) {
+        downloaded++;
+      } else {
+        failed++;
       }
     }
-    showNotification(`${filesToDownload.length} file(s) downloaded!`, 'success');
+
+    if (downloaded > 0 && failed > 0) {
+      showNotification(`Downloaded ${downloaded}/${filesToDownload.length} file(s). Failed: ${failed}`, 'success');
+      return;
+    }
+
+    if (downloaded === filesToDownload.length) {
+      showNotification(`${downloaded} file(s) downloaded!`, 'success');
+      return;
+    }
+
+    if (failed > 0) {
+      showNotification(`Failed to download ${failed} file(s)`);
+      return;
+    }
   };
 
   const handleBulkShare = async () => {
