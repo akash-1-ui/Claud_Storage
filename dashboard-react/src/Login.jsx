@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "./config";
 import "./css/auth.css";
 import { useAuthTransition } from "./AuthTransitionContext";
+import { getApiErrorMessage, readApiResponse } from "./http";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -38,12 +39,18 @@ function Login() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await res.json();
+      const { data, rawText } = await readApiResponse(res);
       if (res.ok && data.token) {
         startAuthTransition("Opening your dashboard...");
         handleAuthSuccess(data);
       } else {
-        alert("Login failed: " + (data.message || "Invalid credentials"));
+        const errorMessage = getApiErrorMessage(
+          res,
+          data,
+          rawText,
+          "Invalid credentials"
+        );
+        alert("Login failed: " + errorMessage);
         setLoading(false);
       }
     } catch (err) {

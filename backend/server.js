@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const mongoose = require("mongoose");
 require("dotenv").config();
 
 console.log("Starting server...");
@@ -14,6 +15,33 @@ const contactRoutes = require("./routes/contactRoutes");
 
 const app = express();
 
+const allowedOrigins = new Set(
+  [
+    "https://cloud-box.vercel.app",
+    (process.env.FRONTEND_URL || "").trim()
+  ].filter(Boolean)
+);
+
+const corsOptions = {
+  origin(origin, callback) {
+    // Allow non-browser and same-origin requests that do not send Origin.
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+};
+
 // Connect to MongoDB
 connectDB().then(() => {
   console.log("MongoDB connected successfully");
@@ -22,7 +50,8 @@ connectDB().then(() => {
   process.exit(1);
 });
 
-app.use(cors());
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json());
 
 // Middleware to log requests
@@ -55,7 +84,19 @@ app.use("/api/contact", contactRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
-  res.json({ status: "Server is running", timestamp: new Date() });
+  const dbConnected = mongoose.connection.readyState === 1;
+  const response = {
+    status: dbConnected ? "Server is running" : "Server is running (DB disconnected)",
+    mongoConnected: dbConnected,
+    timestamp: new Date()
+  };
+
+  if (dbConnected) {
+    res.json(response);
+    return;
+  }
+
+  res.status(503).json(response);
 });
 
 const PORT = process.env.PORT || 5000;

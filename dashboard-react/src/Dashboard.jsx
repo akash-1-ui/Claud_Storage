@@ -10,6 +10,7 @@ import Checkbox from "./Checkbox";
 import NeonCheckbox from "./columnbox";
 import Hamster from "./css/Hamster";
 import Uploadloader from "./css/Uploadloader";
+import { getApiErrorMessage, readApiResponse } from "./http";
 
 const formatDateTime = (value) => {
   const parsed = new Date(value);
@@ -82,7 +83,7 @@ function Dashboard() {
           Authorization: `Bearer ${token}`,
         },
       });
-      const data = await res.json();
+      const { data } = await readApiResponse(res);
       if (data.success) {
         setUserProfile(data.user);
       }
@@ -100,7 +101,10 @@ function Dashboard() {
         },
       });
 
-      const data = await res.json();
+      const { data, rawText } = await readApiResponse(res);
+      if (!res.ok) {
+        throw new Error(getApiErrorMessage(res, data, rawText, "Failed to fetch files"));
+      }
       const fileList = Array.isArray(data) ? data : Array.isArray(data?.files) ? data.files : [];
       // Map data to match expected format, add isImage for thumbnails
       const mappedFiles = fileList.map(file => ({
@@ -814,13 +818,8 @@ useEffect(() => {
         },
         body: JSON.stringify({ email: contactEmail, message: contactMessage }),
       });
-      
-      let data = {};
-      try {
-        data = await res.json();
-      } catch {
-        data = {};
-      }
+
+      const { data, rawText } = await readApiResponse(res);
       
       if (res.ok) {
         showNotification(data.message || 'Message sent successfully!', 'success', true);
@@ -830,8 +829,9 @@ useEffect(() => {
         showNotification('Session expired. Please log in again.', 'error', true);
         navigate('/login');
       } else {
-        console.error('Contact form error:', data.message || JSON.stringify(data));
-        showNotification(data.message || 'Failed to send message', 'error', true);
+        const errorMessage = getApiErrorMessage(res, data, rawText, 'Failed to send message');
+        console.error('Contact form error:', errorMessage);
+        showNotification(errorMessage, 'error', true);
       }
     } catch (err) {
       console.error('Contact form submission error:', err.message);

@@ -1,35 +1,42 @@
-// Dynamic API base URL that works on both desktop and mobile
-export const API_BASE_URL = window.location.origin;
+const DEFAULT_API_BASE_URL = "https://claud-storage.onrender.com";
+const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL)
+  .trim()
+  .replace(/\/+$/, "");
+
+// Set VITE_API_BASE_URL in Vercel if backend URL changes.
+export const API_BASE_URL = configuredApiBaseUrl;
 
 // Cloudinary Configuration for direct uploads (no backend needed)
 export const CLOUDINARY_CONFIG = {
-  CLOUD_NAME: 'dzgccprpv',
-  UPLOAD_PRESET: 'course_uploads', // Unsigned preset for direct uploads
-  API_URL: 'https://api.cloudinary.com/v1_1/dzgccprpv/image/upload'
+  CLOUD_NAME: "dzgccprpv",
+  UPLOAD_PRESET: "course_uploads", // Unsigned preset for direct uploads
+  API_URL: "https://api.cloudinary.com/v1_1/dzgccprpv/image/upload",
 };
+
+const buildApiUrl = (path) => `${API_BASE_URL}${path}`;
 
 // API endpoints
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: `${API_BASE_URL}/api/auth/login`,
-    REGISTER: `${API_BASE_URL}/api/auth/register`,
-    PROFILE: `${API_BASE_URL}/api/auth/profile`,
-    CHANGE_PASSWORD: `${API_BASE_URL}/api/auth/change-password`,
-    DELETE_ACCOUNT: `${API_BASE_URL}/api/auth/delete-account`,
+    LOGIN: buildApiUrl("/api/auth/login"),
+    REGISTER: buildApiUrl("/api/auth/register"),
+    PROFILE: buildApiUrl("/api/auth/profile"),
+    CHANGE_PASSWORD: buildApiUrl("/api/auth/change-password"),
+    DELETE_ACCOUNT: buildApiUrl("/api/auth/delete-account"),
   },
   FILES: {
-    GET_ALL: `${API_BASE_URL}/api/files`,
-    UPLOAD: `${API_BASE_URL}/api/files/upload`,
-    SAVE_FILE: `${API_BASE_URL}/api/files/save`, // New endpoint to save uploaded file metadata
-    DELETE: (id) => `${API_BASE_URL}/api/files/${id}`,
-    RENAME: (id) => `${API_BASE_URL}/api/files/rename/${id}`,
-    DOWNLOAD: (id) => `${API_BASE_URL}/api/files/download/${id}`,
-    CHECK_STORAGE: `${API_BASE_URL}/api/files/check-storage`,
+    GET_ALL: buildApiUrl("/api/files"),
+    UPLOAD: buildApiUrl("/api/files/upload"),
+    SAVE_FILE: buildApiUrl("/api/files/save"), // New endpoint to save uploaded file metadata
+    DELETE: (id) => buildApiUrl(`/api/files/${id}`),
+    RENAME: (id) => buildApiUrl(`/api/files/rename/${id}`),
+    DOWNLOAD: (id) => buildApiUrl(`/api/files/download/${id}`),
+    CHECK_STORAGE: buildApiUrl("/api/files/check-storage"),
   },
   CONTACT: {
-    SEND: `${API_BASE_URL}/api/contact`,
+    SEND: buildApiUrl("/api/contact"),
   },
 };
 
-console.log("🌐 API Base URL:", API_BASE_URL);
-console.log("☁️ Cloudinary Cloud:", CLOUDINARY_CONFIG.CLOUD_NAME);
+console.log("API Base URL:", API_BASE_URL);
+console.log("Cloudinary Cloud:", CLOUDINARY_CONFIG.CLOUD_NAME);

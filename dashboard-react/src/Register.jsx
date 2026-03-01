@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "./config";
 import "./css/auth.css";
 import { useAuthTransition } from "./AuthTransitionContext";
+import { getApiErrorMessage, readApiResponse } from "./http";
 
 function Register() {
   const [name, setName] = useState("");
@@ -39,12 +40,18 @@ function Register() {
         body: JSON.stringify({ username: name, email, password })
       });
 
-      const data = await res.json();
+      const { data, rawText } = await readApiResponse(res);
       if (res.ok && data.token) {
         startAuthTransition("Opening your dashboard...");
         handleAuthSuccess(data);
       } else {
-        alert("Registration failed: " + (data.message || "Please try again"));
+        const errorMessage = getApiErrorMessage(
+          res,
+          data,
+          rawText,
+          "Please try again"
+        );
+        alert("Registration failed: " + errorMessage);
         setLoading(false);
       }
     } catch (err) {
