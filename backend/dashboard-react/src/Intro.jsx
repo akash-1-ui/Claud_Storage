@@ -1,11 +1,18 @@
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./css/auth.css";
 import luffyBg from "./assets/luffy.jpg";
 
 function Intro() {
   const navigate = useNavigate();
   const [isTransitioning, setIsTransitioning] = useState(false);
+
+  useEffect(() => {
+    document.body.classList.add("auth-page");
+    return () => {
+      document.body.classList.remove("auth-page");
+    };
+  }, []);
 
   const handleNavigate = (path) => {
     setIsTransitioning(true);

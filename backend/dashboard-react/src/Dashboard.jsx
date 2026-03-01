@@ -1,7 +1,8 @@
 // ...existing code...
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "./config";
+import { useAuthTransition } from "./AuthTransitionContext";
 import "./css/dashboard.css";
 import Chart from "chart.js/auto";
 import Switch from "./Switch";
@@ -33,6 +34,7 @@ const formatQueuedSize = (bytes) => {
 
 function Dashboard() {
   const navigate = useNavigate();
+  const { completeAuthTransition } = useAuthTransition();
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
   const [files, setFiles] = useState([]);
@@ -198,10 +200,16 @@ function Dashboard() {
   // Show username from userProfile if available, else fallback to localStorage
   const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
 
+useLayoutEffect(() => {
+  document.body.classList.remove("auth-page");
+}, []);
+
 useEffect(() => {
+
   // 🔐 Auth check
   const token = localStorage.getItem("token");
   if (!token) {
+    completeAuthTransition();
     navigate('/login');
     return;
   }
@@ -222,15 +230,16 @@ useEffect(() => {
     setFavorites([]);
   }
 
-  fetchProfile();
-  fetchFiles();
+  Promise.allSettled([fetchProfile(), fetchFiles()]).finally(() => {
+    completeAuthTransition();
+  });
 
   return () => {
     if (chartInstance.current) {
       chartInstance.current.destroy();
     }
   };
-}, [userName]);
+}, [userName, navigate, completeAuthTransition]);
 
 
   const logout = () => {
@@ -1144,7 +1153,7 @@ useEffect(() => {
     : false;
 
   return (
-    <div className={`dashboard${isDarkMode ? ' dark' : ''}`}> 
+    <div className={`dashboard fade-in${isDarkMode ? ' dark' : ''}`}> 
 
       {/* Sidebar */}
       <aside className={`sidebar${isDarkMode ? ' dark' : ''}`}> 
@@ -2437,4 +2446,3 @@ useEffect(() => {
 }
 
 export default Dashboard;
-

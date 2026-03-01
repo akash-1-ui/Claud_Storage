@@ -1,29 +1,36 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "./config";
 import "./css/auth.css";
-import Loader from "./Loader";
+import { useAuthTransition } from "./AuthTransitionContext";
 
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showLoader, setShowLoader] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const { startAuthTransition, completeAuthTransition } = useAuthTransition();
+
+  useLayoutEffect(() => {
+    document.body.classList.add("auth-page");
+    return () => {
+      document.body.classList.remove("auth-page");
+    };
+  }, []);
 
   const handleAuthSuccess = (data) => {
     localStorage.setItem("token", data.token);
     localStorage.setItem("userName", data.user.name);
-    setShowLoader(true);
-    setTimeout(() => {
-      navigate("/dashboard");
-    }, 1200);
+    navigate("/dashboard", { replace: true });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
+
     setLoading(true);
+    startAuthTransition("Signing in...");
 
     try {
       const res = await fetch(API_ENDPOINTS.AUTH.LOGIN, {
@@ -33,22 +40,20 @@ function Login() {
       });
 
       const data = await res.json();
-      if (data.token) {
+      if (res.ok && data.token) {
         handleAuthSuccess(data);
       } else {
         alert("Login failed: " + (data.message || "Invalid credentials"));
+        completeAuthTransition();
         setLoading(false);
       }
     } catch (err) {
       alert("Server error. Please try again.");
       console.error(err);
+      completeAuthTransition();
       setLoading(false);
     }
   };
-
-  if (showLoader) {
-    return <Loader />;
-  }
 
   return (
     <div className="auth-container">
@@ -117,7 +122,16 @@ function Login() {
             </button>
           </form>
           <p>
-            Don't have an account? <a href="#" onClick={() => navigate("/register")}>Sign Up here</a>
+            Don't have an account?{" "}
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate("/register");
+              }}
+            >
+              Sign Up here
+            </a>
           </p>
         </div>
       </div>

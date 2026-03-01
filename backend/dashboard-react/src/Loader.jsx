@@ -248,6 +248,7 @@ const StyledWrapper = styled.div`
       left: -100%;
       opacity: 0;
     }
-  }`;
+  }
+`;
 
 export default Loader;
