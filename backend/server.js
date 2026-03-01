@@ -15,12 +15,22 @@ const contactRoutes = require("./routes/contactRoutes");
 
 const app = express();
 
-const allowedOrigins = new Set(
+const explicitAllowedOrigins = new Set(
   [
     "https://cloud-box.vercel.app",
-    (process.env.FRONTEND_URL || "").trim()
+    (process.env.FRONTEND_URL || "").trim(),
+    ...(process.env.FRONTEND_URLS || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
   ].filter(Boolean)
 );
+
+const isAllowedVercelPreviewOrigin = (origin) =>
+  /^https:\/\/cloud-box(?:-[a-z0-9-]+)?\.vercel\.app$/i.test(origin);
+
+const isAllowedOrigin = (origin) =>
+  explicitAllowedOrigins.has(origin) || isAllowedVercelPreviewOrigin(origin);
 
 const corsOptions = {
   origin(origin, callback) {
@@ -30,7 +40,7 @@ const corsOptions = {
       return;
     }
 
-    if (allowedOrigins.has(origin)) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
       return;
     }
