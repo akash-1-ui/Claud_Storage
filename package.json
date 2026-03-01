@@ -1,7 +1,7 @@
 {
   "scripts": {
     "start": "cd backend && npm start",
-    "dev": "cd backend/dashboard-react && npm run dev"
+    "dev": "cd dashboard-react && npm run dev"
   },
   "dependencies": {
     "nodemailer": "^8.0.1",

@@ -31,10 +31,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve static files from dashboard-react/dist (production build)
+// Serve static files from project-root dashboard-react (production build)
 // If dist doesn't exist, serve from dashboard-react directory
-const dashboardPath = path.join(__dirname, "./dashboard-react/dist");
-const dashboardFallback = path.join(__dirname, "./dashboard-react");
+const dashboardPath = path.resolve(__dirname, "..", "dashboard-react", "dist");
+const dashboardFallback = path.resolve(__dirname, "..", "dashboard-react");
 
 try {
   const fs = require("fs");
@@ -62,8 +62,8 @@ const PORT = process.env.PORT || 5000;
 
 // Catch-all route for React SPA - serve index.html for all non-API routes
 app.get("*", (req, res) => {
-  const indexPath = path.join(__dirname, "./dashboard-react/dist/index.html");
-  const indexFallback = path.join(__dirname, "./dashboard-react/index.html");
+  const indexPath = path.resolve(__dirname, "..", "dashboard-react", "dist", "index.html");
+  const indexFallback = path.resolve(__dirname, "..", "dashboard-react", "index.html");
   
   try {
     const fs = require("fs");

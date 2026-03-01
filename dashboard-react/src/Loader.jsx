@@ -21,12 +21,14 @@ const Loader = () => {
 }
 
 const StyledWrapper = styled.div`
+  --loader-speed-factor: 1.7;
+
   .loader {
     position: absolute;
     top: 50%;
     margin-left: -50px;
     left: 50%;
-    animation: speeder 0.4s linear infinite;
+    animation: speeder calc(0.4s * var(--loader-speed-factor)) linear infinite;
   }
   .loader > span {
     height: 5px;
@@ -96,20 +98,20 @@ const StyledWrapper = styled.div`
     height: 1px;
     background: #000;
     position: absolute;
-    animation: fazer1 0.2s linear infinite;
+    animation: fazer1 calc(0.2s * var(--loader-speed-factor)) linear infinite;
   }
   .loader > span > span:nth-child(2) {
     top: 3px;
-    animation: fazer2 0.4s linear infinite;
+    animation: fazer2 calc(0.4s * var(--loader-speed-factor)) linear infinite;
   }
   .loader > span > span:nth-child(3) {
     top: 1px;
-    animation: fazer3 0.4s linear infinite;
+    animation: fazer3 calc(0.4s * var(--loader-speed-factor)) linear infinite;
     animation-delay: -1s;
   }
   .loader > span > span:nth-child(4) {
     top: 4px;
-    animation: fazer4 1s linear infinite;
+    animation: fazer4 calc(1s * var(--loader-speed-factor)) linear infinite;
     animation-delay: -1s;
   }
   @keyframes fazer1 {
@@ -196,21 +198,21 @@ const StyledWrapper = styled.div`
   }
   .longfazers span:nth-child(1) {
     top: 20%;
-    animation: lf 0.6s linear infinite;
+    animation: lf calc(0.6s * var(--loader-speed-factor)) linear infinite;
     animation-delay: -5s;
   }
   .longfazers span:nth-child(2) {
     top: 40%;
-    animation: lf2 0.8s linear infinite;
+    animation: lf2 calc(0.8s * var(--loader-speed-factor)) linear infinite;
     animation-delay: -1s;
   }
   .longfazers span:nth-child(3) {
     top: 60%;
-    animation: lf3 0.6s linear infinite;
+    animation: lf3 calc(0.6s * var(--loader-speed-factor)) linear infinite;
   }
   .longfazers span:nth-child(4) {
     top: 80%;
-    animation: lf4 0.5s linear infinite;
+    animation: lf4 calc(0.5s * var(--loader-speed-factor)) linear infinite;
     animation-delay: -3s;
   }
   @keyframes lf {

@@ -10,7 +10,7 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-  const { startAuthTransition, completeAuthTransition } = useAuthTransition();
+  const { startAuthTransition } = useAuthTransition();
 
   useLayoutEffect(() => {
     document.body.classList.add("auth-page");
@@ -30,7 +30,6 @@ function Login() {
     if (loading) return;
 
     setLoading(true);
-    startAuthTransition("Signing in...");
 
     try {
       const res = await fetch(API_ENDPOINTS.AUTH.LOGIN, {
@@ -41,16 +40,15 @@ function Login() {
 
       const data = await res.json();
       if (res.ok && data.token) {
+        startAuthTransition("Opening your dashboard...");
         handleAuthSuccess(data);
       } else {
         alert("Login failed: " + (data.message || "Invalid credentials"));
-        completeAuthTransition();
         setLoading(false);
       }
     } catch (err) {
       alert("Server error. Please try again.");
       console.error(err);
-      completeAuthTransition();
       setLoading(false);
     }
   };

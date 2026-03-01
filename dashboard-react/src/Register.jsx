@@ -11,7 +11,7 @@ function Register() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-  const { startAuthTransition, completeAuthTransition } = useAuthTransition();
+  const { startAuthTransition } = useAuthTransition();
 
   useEffect(() => {
     document.body.classList.add("auth-page");
@@ -31,7 +31,6 @@ function Register() {
     if (loading) return;
 
     setLoading(true);
-    startAuthTransition("Creating your account...");
 
     try {
       const res = await fetch(API_ENDPOINTS.AUTH.REGISTER, {
@@ -42,16 +41,15 @@ function Register() {
 
       const data = await res.json();
       if (res.ok && data.token) {
+        startAuthTransition("Opening your dashboard...");
         handleAuthSuccess(data);
       } else {
         alert("Registration failed: " + (data.message || "Please try again"));
-        completeAuthTransition();
         setLoading(false);
       }
     } catch (err) {
       alert("Server error. Please try again.");
       console.error(err);
-      completeAuthTransition();
       setLoading(false);
     }
   };
