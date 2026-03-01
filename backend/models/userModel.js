@@ -19,6 +19,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true
     },
+    profilePhoto: {
+      type: String,
+      default: ""
+    },
     clusterName: {
       type: String,
       required: true,

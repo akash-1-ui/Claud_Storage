@@ -33,6 +33,19 @@ const formatQueuedSize = (bytes) => {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
 
+const mapApiFile = (file) => ({
+  _id: file._id,
+  name: file.fileName,
+  type: file.fileName?.split('.').pop()?.toUpperCase() || "FILE",
+  size: file.fileSize ? (file.fileSize / (1024 * 1024)).toFixed(2) + ' MB' : 'Unknown',
+  updatedAt: file.uploadedAt,
+  deletedAt: file.trashedAt,
+  url: file.fileURL,
+  isFavorite: Boolean(file.isFavorite),
+  isImage: /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.fileName),
+  isVideo: /\.(mp4|webm|ogg|mov|avi)$/i.test(file.fileName)
+});
+
 function Dashboard() {
   const navigate = useNavigate();
   const { completeAuthTransition } = useAuthTransition();
@@ -106,17 +119,7 @@ function Dashboard() {
         throw new Error(getApiErrorMessage(res, data, rawText, "Failed to fetch files"));
       }
       const fileList = Array.isArray(data) ? data : Array.isArray(data?.files) ? data.files : [];
-      // Map data to match expected format, add isImage for thumbnails
-      const mappedFiles = fileList.map(file => ({
-        _id: file._id,
-        name: file.fileName,
-        type: file.fileName.split('.').pop().toUpperCase(),
-        size: file.fileSize ? (file.fileSize / (1024 * 1024)).toFixed(2) + ' MB' : 'Unknown',
-        updatedAt: file.uploadedAt,
-        url: file.fileURL,
-        isImage: /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.fileName),
-        isVideo: /\.(mp4|webm|ogg|mov|avi)$/i.test(file.fileName)
-      }));
+      const mappedFiles = fileList.map(mapApiFile);
       setFiles(mappedFiles);
       setLoading(false);
 
@@ -201,6 +204,28 @@ function Dashboard() {
     }
   };
 
+  const fetchTrashFiles = async () => {
+    const token = localStorage.getItem("token");
+    try {
+      const res = await fetch(API_ENDPOINTS.FILES.GET_TRASH, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const { data, rawText } = await readApiResponse(res);
+      if (!res.ok) {
+        throw new Error(getApiErrorMessage(res, data, rawText, "Failed to fetch trash"));
+      }
+
+      const trashList = Array.isArray(data) ? data : Array.isArray(data?.files) ? data.files : [];
+      setTrashedFiles(trashList.map(mapApiFile));
+    } catch (err) {
+      console.error("Error fetching trash files", err);
+      setTrashedFiles([]);
+    }
+  };
+
   // Show username from userProfile if available, else fallback to localStorage
   const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
 
@@ -218,23 +243,7 @@ useEffect(() => {
     return;
   }
 
-  // Load profile photo from localStorage (user-specific)
-  const savedPhoto = localStorage.getItem(`profilePhoto_${userName}`);
-  setProfilePhoto(savedPhoto || null);
-  
-  // Load favorites (persist across sessions until user explicitly removes)
-  const savedFavorites = localStorage.getItem(`favorites_${userName}`);
-  if (savedFavorites) {
-    try {
-      setFavorites(JSON.parse(savedFavorites));
-    } catch {
-      setFavorites([]);
-    }
-  } else {
-    setFavorites([]);
-  }
-
-  Promise.allSettled([fetchProfile(), fetchFiles()]).finally(() => {
+  Promise.allSettled([fetchProfile(), fetchFiles(), fetchTrashFiles()]).finally(() => {
     completeAuthTransition();
   });
 
@@ -244,6 +253,14 @@ useEffect(() => {
     }
   };
 }, [userName, navigate, completeAuthTransition]);
+
+useEffect(() => {
+  setProfilePhoto(userProfile?.profilePhoto || null);
+}, [userProfile?.profilePhoto]);
+
+useEffect(() => {
+  setFavorites(files.filter((file) => file.isFavorite));
+}, [files]);
 
 
   const logout = () => {
@@ -264,12 +281,38 @@ useEffect(() => {
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
-      const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
-      setProfilePhoto(reader.result);
-      localStorage.setItem(`profilePhoto_${userName}`, reader.result);
-      setShowProfileUpload(false);
-      setIsHamburgerOpen(false);
+    reader.onloadend = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        showNotification("Session expired. Please log in again.");
+        navigate("/login");
+        return;
+      }
+
+      try {
+        const response = await fetch(API_ENDPOINTS.AUTH.PROFILE_PHOTO, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ profilePhoto: reader.result })
+        });
+
+        const { data, rawText } = await readApiResponse(response);
+        if (!response.ok || !data?.success) {
+          throw new Error(getApiErrorMessage(response, data, rawText, "Failed to update profile photo"));
+        }
+
+        setProfilePhoto(data?.user?.profilePhoto || reader.result);
+        setUserProfile((prev) => (prev ? { ...prev, profilePhoto: data?.user?.profilePhoto || reader.result } : prev));
+        setShowProfileUpload(false);
+        setIsHamburgerOpen(false);
+        showNotification("Profile photo updated", "success");
+      } catch (err) {
+        console.error("Profile photo update error:", err);
+        showNotification(err.message || "Failed to update profile photo");
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -281,26 +324,94 @@ useEffect(() => {
     handleProfilePhotoUpload({ target: { files: [droppedFile] } });
   };
 
-  const handleRemoveProfilePhoto = () => {
-    const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
-    localStorage.removeItem(`profilePhoto_${userName}`);
-    setProfilePhoto(null);
-    setShowProfileUpload(false);
-    setIsHamburgerOpen(false);
+  const handleRemoveProfilePhoto = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      showNotification("Session expired. Please log in again.");
+      navigate("/login");
+      return;
+    }
+
+    try {
+      const response = await fetch(API_ENDPOINTS.AUTH.PROFILE_PHOTO, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ profilePhoto: "" })
+      });
+
+      const { data, rawText } = await readApiResponse(response);
+      if (!response.ok || !data?.success) {
+        throw new Error(getApiErrorMessage(response, data, rawText, "Failed to remove profile photo"));
+      }
+
+      setProfilePhoto(null);
+      setUserProfile((prev) => (prev ? { ...prev, profilePhoto: "" } : prev));
+      setShowProfileUpload(false);
+      setIsHamburgerOpen(false);
+      showNotification("Profile photo removed", "success");
+    } catch (err) {
+      console.error("Profile photo remove error:", err);
+      showNotification(err.message || "Failed to remove profile photo");
+    }
   };
 
-  const handleToggleFavorite = (file) => {
-    const isFavorited = favorites.some(fav => fav._id === file._id);
-    let newFavorites;
-    if (isFavorited) {
-      newFavorites = favorites.filter(fav => fav._id !== file._id);
-    } else {
-      newFavorites = [...favorites, file];
+  const handleToggleFavorite = async (file) => {
+    if (!file?._id) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      showNotification("Session expired. Please log in again.");
+      navigate("/login");
+      return;
     }
-    setFavorites(newFavorites);
-    const userName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
-    localStorage.setItem(`favorites_${userName}`, JSON.stringify(newFavorites));
-    showNotification(isFavorited ? 'Removed from favorites' : 'Added to favorites', 'success');
+
+    const nextFavoriteState = !file.isFavorite;
+
+    setFiles((previous) =>
+      previous.map((item) =>
+        item._id === file._id ? { ...item, isFavorite: nextFavoriteState } : item
+      )
+    );
+
+    if (selectedFileDetails?._id === file._id) {
+      setSelectedFileDetails((previous) =>
+        previous ? { ...previous, isFavorite: nextFavoriteState } : previous
+      );
+    }
+
+    try {
+      const response = await fetch(API_ENDPOINTS.FILES.FAVORITE(file._id), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ isFavorite: nextFavoriteState })
+      });
+
+      const { data, rawText } = await readApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, rawText, "Failed to update favorite"));
+      }
+
+      showNotification(nextFavoriteState ? "Added to favorites" : "Removed from favorites", "success");
+    } catch (err) {
+      console.error("Favorite update error:", err);
+      setFiles((previous) =>
+        previous.map((item) =>
+          item._id === file._id ? { ...item, isFavorite: !nextFavoriteState } : item
+        )
+      );
+      if (selectedFileDetails?._id === file._id) {
+        setSelectedFileDetails((previous) =>
+          previous ? { ...previous, isFavorite: !nextFavoriteState } : previous
+        );
+      }
+      showNotification(err.message || "Failed to update favorite");
+    }
   };
 
   const openFileDetailsModal = (file) => {
@@ -607,36 +718,28 @@ useEffect(() => {
       setSelectedFileDetails(null);
     }
 
-    const fileName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
-    const trashedKey = `trashed_${fileName}`;
-    const existingTrash = JSON.parse(localStorage.getItem(trashedKey) || '[]');
-    
-    // Add file to trash with timestamp
-    const trashedItem = {
-      ...file,
-      deletedAt: new Date().getTime()
-    };
-    existingTrash.push(trashedItem);
-    localStorage.setItem(trashedKey, JSON.stringify(existingTrash));
-    
-    // Update local trash state
-    setTrashedFiles(existingTrash);
-    
-    // Remove from files
-    setFiles(files.filter(f => f._id !== file._id));
-    showNotification('File deleted successfully.', 'success');
-    
-    // Also attempt to delete from backend
     try {
       const token = localStorage.getItem("token");
-      await fetch(API_ENDPOINTS.FILES.DELETE(file._id), {
-        method: 'DELETE',
+      const response = await fetch(API_ENDPOINTS.FILES.MOVE_TO_TRASH(file._id), {
+        method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
+
+      const { data, rawText } = await readApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, rawText, "Failed to move file to trash"));
+      }
+
+      const trashedFile = data?.file ? mapApiFile(data.file) : { ...file, deletedAt: new Date().toISOString() };
+
+      setFiles((previous) => previous.filter((item) => item._id !== file._id));
+      setTrashedFiles((previous) => [trashedFile, ...previous.filter((item) => item._id !== file._id)]);
+      showNotification('File moved to trash.', 'success');
     } catch (err) {
-      showNotification('Error deleting file');
+      console.error("Move to trash error:", err);
+      showNotification(err.message || 'Error moving file to trash');
     }
   };
 
@@ -652,41 +755,54 @@ useEffect(() => {
     });
   };
 
-  const handleRestoreFromTrash = (file) => {
-    const fileName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
-    const trashedKey = `trashed_${fileName}`;
-    
-    // Remove from trash
-    const updated = trashedFiles.filter(f => f._id !== file._id);
-    setTrashedFiles(updated);
-    localStorage.setItem(trashedKey, JSON.stringify(updated));
-    
-    // Add back to files
-    const restoredFile = {
-      ...file,
-      _id: file._id,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      updatedAt: file.updatedAt,
-      url: file.url,
-      isImage: file.isImage,
-      isVideo: file.isVideo
-    };
-    setFiles([...files, restoredFile]);
-    showNotification('File restored from trash!', 'success');
+  const handleRestoreFromTrash = async (file) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(API_ENDPOINTS.FILES.RESTORE_FROM_TRASH(file._id), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const { data, rawText } = await readApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, rawText, "Failed to restore file"));
+      }
+
+      const restoredFile = data?.file ? mapApiFile(data.file) : file;
+      setTrashedFiles((previous) => previous.filter((item) => item._id !== file._id));
+      setFiles((previous) => [restoredFile, ...previous.filter((item) => item._id !== file._id)]);
+      showNotification('File restored from trash!', 'success');
+    } catch (err) {
+      console.error("Restore from trash error:", err);
+      showNotification(err.message || 'Failed to restore file');
+    }
   };
 
-  const handlePermanentlyDelete = (file) => {
+  const handlePermanentlyDelete = async (file) => {
     if (!confirm(`Permanently delete "${file.name}"? This cannot be undone.`)) return;
-    
-    const fileName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
-    const trashedKey = `trashed_${fileName}`;
-    
-    const updated = trashedFiles.filter(f => f._id !== file._id);
-    setTrashedFiles(updated);
-    localStorage.setItem(trashedKey, JSON.stringify(updated));
-    showNotification('File deleted successfully.', 'success');
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(API_ENDPOINTS.FILES.DELETE_FROM_TRASH(file._id), {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const { data, rawText } = await readApiResponse(response);
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(response, data, rawText, "Failed to permanently delete file"));
+      }
+
+      setTrashedFiles((previous) => previous.filter((item) => item._id !== file._id));
+      showNotification('File deleted successfully.', 'success');
+    } catch (err) {
+      console.error("Permanent delete error:", err);
+      showNotification(err.message || 'Failed to delete file');
+    }
   };
 
   const handleChangePassword = async (e) => {
@@ -873,50 +989,52 @@ useEffect(() => {
       showNotification('No files selected');
       return;
     }
-    if (!confirm(`Delete ${selectedFileIds.length} file(s)?`)) return;
+    if (!confirm(`Move ${selectedFileIds.length} file(s) to trash?`)) return;
 
     const token = localStorage.getItem("token");
-    let deleted = 0;
+    let moved = 0;
     let failed = 0;
     const total = selectedFileIds.length;
-    
+
     for (const fileId of selectedFileIds) {
-      const file = files.find(f => f._id === fileId);
+      const file = files.find((item) => item._id === fileId);
       if (!file) {
         failed++;
         continue;
       }
+
       try {
-        const res = await fetch(API_ENDPOINTS.FILES.DELETE(fileId), {
-          method: 'DELETE',
+        const response = await fetch(API_ENDPOINTS.FILES.MOVE_TO_TRASH(fileId), {
+          method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
-        if (res.ok) {
-          deleted++;
+
+        if (response.ok) {
+          moved++;
         } else {
           failed++;
         }
       } catch (err) {
-        console.error('Error deleting file:', err);
+        console.error("Error moving file to trash:", err);
         failed++;
       }
     }
-    
-    // Enhanced message with success/fail details
-    let successMessage;
-    if (deleted > 0 && failed > 0) {
-      successMessage = `✓ Deleted ${deleted}/${total} successfully | ✗ Failed: ${failed}`;
-    } else if (deleted === total) {
-      successMessage = `✓ Successfully deleted all ${deleted} file(s)!`;
+
+    let statusMessage;
+    if (moved > 0 && failed > 0) {
+      statusMessage = `Moved ${moved}/${total} to trash | Failed: ${failed}`;
+    } else if (moved === total) {
+      statusMessage = `Moved all ${moved} file(s) to trash`;
     } else {
-      successMessage = `✗ Failed to delete ${failed} file(s)`;
+      statusMessage = `Failed to move ${failed} file(s) to trash`;
     }
-    
-    showNotification(successMessage, deleted > 0 ? 'success' : 'error');
+
+    showNotification(statusMessage, moved > 0 ? "success" : "error");
     setSelectedFileIds([]);
     await fetchFiles();
+    await fetchTrashFiles();
     await fetchProfile();
   };
 
@@ -1083,26 +1201,17 @@ useEffect(() => {
 
   const storageInfo = getStorageInfo();
 
-  // Load trash on mount
   useEffect(() => {
-    const fileName = (userProfile && userProfile.name) || localStorage.getItem("userName") || "User";
-    const trashedKey = `trashed_${fileName}`;
-    const saved = JSON.parse(localStorage.getItem(trashedKey) || '[]');
-    
-    // Remove items older than 24 hours
-    const now = new Date().getTime();
-    const filtered = saved.filter(item => {
-      const age = now - item.deletedAt;
-      return age < 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-    });
-    
-    // Update if any items were removed
-    if (filtered.length !== saved.length) {
-      localStorage.setItem(trashedKey, JSON.stringify(filtered));
-    }
-    
-    setTrashedFiles(filtered);
-  }, [userProfile]);
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    fetchTrashFiles();
+    const intervalId = setInterval(() => {
+      fetchTrashFiles();
+    }, 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [userName]);
 
   // Add dark mode class on mount if needed
   useEffect(() => {
@@ -1159,7 +1268,7 @@ useEffect(() => {
       <aside className={`sidebar${isDarkMode ? ' dark' : ''}`}> 
         <div className="logo" style={{display: 'flex', alignItems: 'center', gap: '0'}}>
           <span>CloudBox</span>
-          <img src="/src/assets/LOGO.png" alt="CloudBox" style={{width: '80px', height: '80px', objectFit: 'contain'}} />
+          <img src="/logo.png" alt="CloudBox" style={{width: '80px', height: '80px', objectFit: 'contain'}} />
         </div>
         <nav>
           <ul>
@@ -2237,8 +2346,13 @@ useEffect(() => {
               <div className="grid-view" style={{marginTop: '20px'}}>
                 {trashedFiles.map((file) => {
                   const now = new Date().getTime();
-                  const age = now - file.deletedAt;
-                  const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - age) / (60 * 60 * 1000));
+                  const parsedDeletedAt = new Date(file.deletedAt || 0).getTime();
+                  const deletedAtMs = Number.isFinite(parsedDeletedAt) ? parsedDeletedAt : now;
+                  const age = now - deletedAtMs;
+                  const hoursLeft = Math.max(
+                    0,
+                    Math.ceil((24 * 60 * 60 * 1000 - age) / (60 * 60 * 1000))
+                  );
                   
                   return (
                     <div key={file._id} className="file-item" style={{position: 'relative'}}>
@@ -2446,3 +2560,4 @@ useEffect(() => {
 }
 
 export default Dashboard;
+

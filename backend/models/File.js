@@ -7,6 +7,20 @@ const fileSchema = new mongoose.Schema({
   fileURL: String,
   fileSize: Number,
   cloudinaryPublicId: String,
+  isFavorite: {
+    type: Boolean,
+    default: false
+  },
+  isTrashed: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  trashedAt: {
+    type: Date,
+    default: null,
+    index: true
+  },
   permission: {
     type: String,
     default: "private"

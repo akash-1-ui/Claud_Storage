@@ -10,6 +10,7 @@ const {
 const ONE_MB = 1024 * 1024;
 const STORAGE_LIMIT_MB = 1024;
 const STORAGE_LIMIT_BYTES = STORAGE_LIMIT_MB * ONE_MB;
+const TRASH_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 const bytesToMB = (bytes) => Number((bytes / ONE_MB).toFixed(4));
 const toSafeBytes = (value) => (Number.isFinite(value) && value > 0 ? value : 0);
@@ -108,6 +109,55 @@ const decrementStorage = async (userId, bytes) => {
   return syncStorageFields(userId);
 };
 
+const purgeExpiredTrashForUser = async (userId) => {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_MS);
+  const expiredFiles = await File.find({
+    userId,
+    isTrashed: true,
+    trashedAt: { $lte: cutoff }
+  });
+
+  if (expiredFiles.length === 0) {
+    return 0;
+  }
+
+  let cluster = null;
+  try {
+    const result = await getUserAndCluster(userId);
+    cluster = result.cluster;
+  } catch (clusterError) {
+    console.warn("trash purge cluster warning:", clusterError.message);
+  }
+
+  for (const file of expiredFiles) {
+    if (!file.cloudinaryPublicId || !cluster) {
+      continue;
+    }
+
+    try {
+      await destroyFromCloudinary(cluster, file.cloudinaryPublicId);
+    } catch (cloudinaryError) {
+      console.warn("trash purge cloudinary warning:", cloudinaryError.message);
+    }
+  }
+
+  const totalExpiredBytes = expiredFiles.reduce(
+    (sum, file) => sum + toSafeBytes(file.fileSize),
+    0
+  );
+
+  await File.deleteMany({
+    _id: { $in: expiredFiles.map((file) => file._id) },
+    userId
+  });
+
+  if (totalExpiredBytes > 0) {
+    await decrementStorage(userId, totalExpiredBytes);
+  }
+
+  return expiredFiles.length;
+};
+
 exports.uploadFile = async (req, res) => {
   let reservedBytes = 0;
   let uploadedPublicId = null;
@@ -130,6 +180,8 @@ exports.uploadFile = async (req, res) => {
         message: "Invalid file size"
       });
     }
+
+    await purgeExpiredTrashForUser(req.userId);
 
     const { user, cluster } = await getUserAndCluster(req.userId);
     assignedCluster = cluster;
@@ -222,6 +274,7 @@ exports.saveFileMetadata = async (req, res) => {
       });
     }
 
+    await purgeExpiredTrashForUser(req.userId);
     await syncStorageFields(req.userId);
 
     const reservedUser = await reserveStorage(req.userId, fileSizeBytes);
@@ -267,7 +320,11 @@ exports.saveFileMetadata = async (req, res) => {
 
 exports.getFiles = async (req, res) => {
   try {
-    const files = await File.find({ userId: req.userId }).sort({ uploadedAt: -1 });
+    await purgeExpiredTrashForUser(req.userId);
+    const files = await File.find({
+      userId: req.userId,
+      isTrashed: { $ne: true }
+    }).sort({ uploadedAt: -1 });
     return res.json(files);
   } catch (error) {
     return res.status(500).json({
@@ -277,9 +334,155 @@ exports.getFiles = async (req, res) => {
   }
 };
 
+exports.getTrashFiles = async (req, res) => {
+  try {
+    await purgeExpiredTrashForUser(req.userId);
+    const files = await File.find({
+      userId: req.userId,
+      isTrashed: true
+    }).sort({ trashedAt: -1, uploadedAt: -1 });
+    return res.json(files);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error fetching trash files",
+      error: error.message
+    });
+  }
+};
+
+exports.moveFileToTrash = async (req, res) => {
+  try {
+    await purgeExpiredTrashForUser(req.userId);
+
+    const file = await File.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+      isTrashed: { $ne: true }
+    });
+
+    if (!file) {
+      return res.status(404).json({ message: "File not found" });
+    }
+
+    file.isTrashed = true;
+    file.trashedAt = new Date();
+    await file.save();
+
+    return res.json({ message: "File moved to trash", file });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error moving file to trash",
+      error: error.message
+    });
+  }
+};
+
+exports.restoreFileFromTrash = async (req, res) => {
+  try {
+    await purgeExpiredTrashForUser(req.userId);
+
+    const file = await File.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+      isTrashed: true
+    });
+
+    if (!file) {
+      return res.status(404).json({ message: "File not found in trash" });
+    }
+
+    file.isTrashed = false;
+    file.trashedAt = null;
+    await file.save();
+
+    return res.json({ message: "File restored from trash", file });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error restoring file from trash",
+      error: error.message
+    });
+  }
+};
+
+exports.deleteTrashedFile = async (req, res) => {
+  try {
+    await purgeExpiredTrashForUser(req.userId);
+
+    const file = await File.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+      isTrashed: true
+    });
+
+    if (!file) {
+      return res.status(404).json({ message: "File not found in trash" });
+    }
+
+    if (file.cloudinaryPublicId) {
+      try {
+        const { cluster } = await getUserAndCluster(req.userId);
+        await destroyFromCloudinary(cluster, file.cloudinaryPublicId);
+      } catch (cloudinaryError) {
+        console.warn("cloudinary delete warning:", cloudinaryError.message);
+      }
+    }
+
+    const deleted = await File.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.userId,
+      isTrashed: true
+    });
+
+    if (deleted && deleted.fileSize) {
+      await decrementStorage(req.userId, deleted.fileSize);
+    }
+
+    return res.json({ message: "File permanently deleted" });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error deleting trashed file",
+      error: error.message
+    });
+  }
+};
+
+exports.setFavorite = async (req, res) => {
+  try {
+    const { isFavorite } = req.body;
+    if (typeof isFavorite !== "boolean") {
+      return res.status(400).json({ message: "isFavorite must be boolean" });
+    }
+
+    const updated = await File.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        userId: req.userId,
+        isTrashed: { $ne: true }
+      },
+      { $set: { isFavorite } },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "File not found" });
+    }
+
+    return res.json({ message: "Favorite updated", file: updated });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error updating favorite",
+      error: error.message
+    });
+  }
+};
+
 exports.deleteFile = async (req, res) => {
   try {
-    const file = await File.findOne({ _id: req.params.id, userId: req.userId });
+    const file = await File.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+      isTrashed: { $ne: true }
+    });
     if (!file) {
       return res.status(404).json({ message: "File not found" });
     }
@@ -293,7 +496,11 @@ exports.deleteFile = async (req, res) => {
       }
     }
 
-    const deleted = await File.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    const deleted = await File.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.userId,
+      isTrashed: { $ne: true }
+    });
 
     if (deleted && deleted.fileSize) {
       await decrementStorage(req.userId, deleted.fileSize);
@@ -315,13 +522,17 @@ exports.renameFile = async (req, res) => {
       return res.status(400).json({ message: "New name is required" });
     }
 
-    const file = await File.findOne({ _id: req.params.id, userId: req.userId });
+    const file = await File.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+      isTrashed: { $ne: true }
+    });
     if (!file) {
       return res.status(404).json({ message: "File not found" });
     }
 
     const updated = await File.findOneAndUpdate(
-      { _id: req.params.id, userId: req.userId },
+      { _id: req.params.id, userId: req.userId, isTrashed: { $ne: true } },
       { fileName: newName.trim() },
       { new: true }
     );
@@ -337,7 +548,11 @@ exports.renameFile = async (req, res) => {
 
 exports.downloadFile = async (req, res) => {
   try {
-    const file = await File.findOne({ _id: req.params.id, userId: req.userId });
+    const file = await File.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+      isTrashed: { $ne: true }
+    });
     if (!file) {
       return res.status(404).json({ message: "File not found" });
     }
@@ -357,12 +572,17 @@ exports.downloadFile = async (req, res) => {
 
 exports.checkStorage = async (req, res) => {
   try {
+    await purgeExpiredTrashForUser(req.userId);
+
     const user = await syncStorageFields(req.userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const userFiles = await File.find({ userId: req.userId }).sort({ uploadedAt: -1 });
+    const userFiles = await File.find({
+      userId: req.userId,
+      isTrashed: { $ne: true }
+    }).sort({ uploadedAt: -1 });
 
     const storageUsed = user.storageUsed;
     const storageAvailable = Math.max(0, STORAGE_LIMIT_BYTES - storageUsed);

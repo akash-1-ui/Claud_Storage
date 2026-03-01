@@ -5,6 +5,11 @@ const {
   uploadFile,
   saveFileMetadata,
   getFiles,
+  getTrashFiles,
+  moveFileToTrash,
+  restoreFileFromTrash,
+  deleteTrashedFile,
+  setFavorite,
   deleteFile,
   renameFile,
   downloadFile,
@@ -21,8 +26,13 @@ const upload = multer({
 });
 
 router.get("/", auth, getFiles);
+router.get("/trash", auth, getTrashFiles);
 router.post("/upload", auth, upload.single("file"), uploadFile);
 router.post("/save", auth, saveFileMetadata);
+router.post("/trash/:id", auth, moveFileToTrash);
+router.post("/restore/:id", auth, restoreFileFromTrash);
+router.delete("/trash/:id", auth, deleteTrashedFile);
+router.patch("/favorite/:id", auth, setFavorite);
 router.delete("/:id", auth, deleteFile);
 router.put("/rename/:id", auth, renameFile);
 router.get("/download/:id", auth, downloadFile);

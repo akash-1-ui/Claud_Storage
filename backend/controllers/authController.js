@@ -9,6 +9,7 @@ const File = require("../models/File");
 const ONE_MB = 1024 * 1024;
 const STORAGE_LIMIT_MB = 1024;
 const STORAGE_LIMIT_BYTES = STORAGE_LIMIT_MB * ONE_MB;
+const MAX_PROFILE_PHOTO_LENGTH = 5 * ONE_MB;
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -126,6 +127,7 @@ const buildUserResponse = (user) => ({
   id: user._id,
   name: user.username,
   email: user.email,
+  profilePhoto: user.profilePhoto || "",
   clusterName: user.clusterName,
   cloudName: user.cloudName,
   storageUsedMB: user.storageUsedMB,
@@ -437,6 +439,52 @@ exports.getProfile = async (req, res) => {
     });
   } catch (error) {
     console.error("getProfile error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+exports.updateProfilePhoto = async (req, res) => {
+  try {
+    const rawProfilePhoto = req.body?.profilePhoto;
+    const normalizedProfilePhoto = typeof rawProfilePhoto === "string" ? rawProfilePhoto.trim() : "";
+
+    if (normalizedProfilePhoto && !normalizedProfilePhoto.startsWith("data:image/")) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid profile photo format"
+      });
+    }
+
+    if (normalizedProfilePhoto.length > MAX_PROFILE_PHOTO_LENGTH) {
+      return res.status(413).json({
+        success: false,
+        message: "Profile photo payload is too large"
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      { $set: { profilePhoto: normalizedProfilePhoto } },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: normalizedProfilePhoto ? "Profile photo updated" : "Profile photo removed",
+      user: buildUserResponse(user)
+    });
+  } catch (error) {
+    console.error("updateProfilePhoto error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error"
