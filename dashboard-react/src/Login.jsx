@@ -61,7 +61,7 @@ function Login() {
   };
 
   return (
-    <div className="auth-container">
+    <div className="auth-container auth-container-login">
       <div className="auth-left auth-left-login">
         <div className="auth-left-content">
           <h1>Welcome Back to <span className="highlight">CloudBox</span></h1>

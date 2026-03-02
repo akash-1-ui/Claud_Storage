@@ -87,6 +87,10 @@ function Dashboard() {
   const [selectedFileDetails, setSelectedFileDetails] = useState(null);
   const [isUploadBoxExpanded, setIsUploadBoxExpanded] = useState(true);
   const [queuedUploadFiles, setQueuedUploadFiles] = useState([]);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 767 : false
+  );
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const fetchProfile = async () => {
     const token = localStorage.getItem("token");
@@ -1228,6 +1232,31 @@ useEffect(() => {
     }
   }, [isDarkMode]);
 
+  useEffect(() => {
+    const mobileQuery = window.matchMedia('(max-width: 767px)');
+
+    const applyViewport = (matches) => {
+      setIsMobileViewport(matches);
+      if (!matches) {
+        setIsMobileSidebarOpen(false);
+      }
+    };
+
+    applyViewport(mobileQuery.matches);
+
+    const handleViewportChange = (event) => {
+      applyViewport(event.matches);
+    };
+
+    if (mobileQuery.addEventListener) {
+      mobileQuery.addEventListener('change', handleViewportChange);
+      return () => mobileQuery.removeEventListener('change', handleViewportChange);
+    }
+
+    mobileQuery.addListener(handleViewportChange);
+    return () => mobileQuery.removeListener(handleViewportChange);
+  }, []);
+
   // Close hamburger menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -1244,6 +1273,8 @@ useEffect(() => {
     const closeOnEscape = (event) => {
       if (event.key === "Escape") {
         setSelectedFileDetails(null);
+        setIsMobileSidebarOpen(false);
+        setIsHamburgerOpen(false);
       }
     };
 
@@ -1257,28 +1288,54 @@ useEffect(() => {
     queueSelectedFiles(files);
   };
 
+  const handleSectionChange = (section) => {
+    setActiveSection(section);
+    if (isMobileViewport) {
+      setIsMobileSidebarOpen(false);
+    }
+  };
+
+  const openFilePicker = () => {
+    const picker = document.getElementById('file-upload-input');
+    if (picker) {
+      picker.click();
+    }
+    if (isMobileViewport) {
+      setIsMobileSidebarOpen(false);
+    }
+  };
+
   const selectedIsFavorite = selectedFileDetails
     ? favorites.some((fav) => fav._id === selectedFileDetails._id)
     : false;
+  const rowChunkSize = isMobileViewport ? 3 : 4;
 
   return (
     <div className={`dashboard fade-in${isDarkMode ? ' dark' : ''}`}> 
+      {isMobileViewport && isMobileSidebarOpen && (
+        <button
+          type="button"
+          className="mobile-sidebar-backdrop"
+          onClick={() => setIsMobileSidebarOpen(false)}
+          aria-label="Close sidebar"
+        />
+      )}
 
       {/* Sidebar */}
-      <aside className={`sidebar${isDarkMode ? ' dark' : ''}`}> 
+      <aside className={`sidebar${isDarkMode ? ' dark' : ''}${isMobileSidebarOpen ? ' mobile-open' : ''}`}> 
         <div className="logo" style={{display: 'flex', alignItems: 'center', gap: '0'}}>
           <span>CloudBox</span>
           <img src="/logo.png" alt="CloudBox" style={{width: '80px', height: '80px', objectFit: 'contain'}} />
         </div>
         <nav>
           <ul>
-            <li className={activeSection === 'files' ? 'active' : ''} onClick={() => setActiveSection('files')}>
+            <li className={activeSection === 'files' ? 'active' : ''} onClick={() => handleSectionChange('files')}>
               Home
             </li>
-            <li className={activeSection === 'favorites' ? 'active' : ''} onClick={() => setActiveSection('favorites')}>Favorites</li>
-            <li className={activeSection === 'trash' ? 'active' : ''} onClick={() => setActiveSection('trash')}>Trash</li>
-            <li className={activeSection === 'contact' ? 'active' : ''} onClick={() => setActiveSection('contact')}>Contact</li>
-            <li className={activeSection === 'settings' ? 'active' : ''} onClick={() => setActiveSection('settings')}>Settings</li>
+            <li className={activeSection === 'favorites' ? 'active' : ''} onClick={() => handleSectionChange('favorites')}>Favorites</li>
+            <li className={activeSection === 'trash' ? 'active' : ''} onClick={() => handleSectionChange('trash')}>Trash</li>
+            <li className={activeSection === 'contact' ? 'active' : ''} onClick={() => handleSectionChange('contact')}>Contact Us</li>
+            <li className={activeSection === 'settings' ? 'active' : ''} onClick={() => handleSectionChange('settings')}>Settings</li>
           </ul>
         </nav>
         <div className="storage-usage">
@@ -1313,7 +1370,7 @@ useEffect(() => {
         </div>
         <button
           className="upload-btn"
-          onClick={() => document.getElementById('file-upload-input').click()}
+          onClick={openFilePicker}
         >
           + Upload
         </button>
@@ -1360,6 +1417,14 @@ useEffect(() => {
 
         {/* Header */}
         <header>
+          <button
+            type="button"
+            className="mobile-sidebar-toggle"
+            onClick={() => setIsMobileSidebarOpen((prev) => !prev)}
+            aria-label={isMobileSidebarOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          >
+            <img src="/logo.png" alt="" aria-hidden="true" />
+          </button>
           <div className="search-bar">
             <label htmlFor="search-input" style={{display:'none'}}>Search files</label>
             <input
@@ -1419,7 +1484,7 @@ useEffect(() => {
             <span 
               className="cloud-icon"
               title="Upload files"
-              onClick={() => document.getElementById('file-upload-input').click()}
+              onClick={openFilePicker}
             >
               ☁️
             </span>
@@ -1427,7 +1492,7 @@ useEffect(() => {
             {/* Mobile Upload Button */}
             <button
               className="mobile-upload-btn"
-              onClick={() => document.getElementById('file-upload-input').click()}
+              onClick={openFilePicker}
               title="Upload files"
             >
               ☁️ Upload
@@ -1972,7 +2037,7 @@ useEffect(() => {
                     className="upload-zone"
                     onDrop={handleDrop}
                     onDragOver={(e) => e.preventDefault()}
-                    onClick={() => document.getElementById('file-upload-input').click()}
+                    onClick={openFilePicker}
                     style={{ cursor: 'pointer' }}
                   >
                     <Hamster />
@@ -2088,8 +2153,8 @@ useEffect(() => {
                             (() => {
                               const files = groupedByDate[date];
                               const rows = [];
-                              for (let i = 0; i < files.length; i += 4) {
-                                rows.push(files.slice(i, i + 4));
+                              for (let i = 0; i < files.length; i += rowChunkSize) {
+                                rows.push(files.slice(i, i + rowChunkSize));
                               }
                               
                               return (
@@ -2106,7 +2171,7 @@ useEffect(() => {
                                         style={{
                                           display: 'flex',
                                           marginBottom: '16px',
-                                          gap: '16px',
+                                          gap: isMobileViewport ? '10px' : '16px',
                                           alignItems: 'center',
                                           position: 'relative'
                                         }}
@@ -2128,8 +2193,14 @@ useEffect(() => {
                                             />
                                         </div>
 
-                                        {/* Grid of files - max 4 per row */}
-                                        <div style={{display: 'grid', gridTemplateColumns: `repeat(${Math.min(rowFiles.length, 4)}, 1fr)`, gap: '12px', width: `calc(25% * ${Math.min(rowFiles.length, 4)})`}}>
+                                        {/* Grid of files with responsive columns */}
+                                        <div style={{
+                                          display: 'grid',
+                                          gridTemplateColumns: `repeat(${Math.min(rowFiles.length, rowChunkSize)}, minmax(0, 1fr))`,
+                                          gap: isMobileViewport ? '6px' : '12px',
+                                          width: '100%',
+                                          maxWidth: isMobileViewport ? '100%' : `calc(25% * ${Math.min(rowFiles.length, rowChunkSize)})`
+                                        }}>
                                           {rowFiles.map((file, fileIndex) => {
                                             const isSelected = selectedFileIds.includes(file._id);
                                             return (

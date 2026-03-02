@@ -170,6 +170,14 @@
   gap: 10px;
 }
 
+.mobile-sidebar-toggle {
+  display: none;
+}
+
+.mobile-sidebar-backdrop {
+  display: none;
+}
+
 .sidebar ul {
   list-style: none;
 }
@@ -1932,103 +1940,211 @@ td button:nth-child(7):hover {
 @media (max-width: 767px) {
   .dashboard {
     flex-direction: column;
+    position: relative;
+  }
+
+  .mobile-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: none;
+    margin: 0;
+    padding: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 1300;
   }
 
   .sidebar {
-    width: 100%;
-    min-height: auto;
-    padding: 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    border-bottom: 1px solid #e5e7eb;
-    border-right: none;
+    width: min(280px, 84vw);
+    height: 100vh;
+    max-height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    z-index: 1400;
+    padding: 16px;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom: none;
+    box-shadow: 0 24px 42px rgba(15, 23, 42, 0.34);
+    overflow-y: auto;
+    display: block;
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .sidebar.dark {
+    border-right-color: #3a3a47;
   }
 
   .sidebar nav {
-    display: none;
+    display: block;
     width: 100%;
+    margin: 8px 0 0;
+  }
+
+  .sidebar nav ul {
+    display: block;
+    overflow: visible;
+  }
+
+  .sidebar li {
+    font-size: 14px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
   }
 
   .sidebar .upload-btn {
-    display: none;
+    display: block;
+    width: 100%;
+    margin-top: 12px;
   }
 
   .sidebar .storage-usage {
-    display: none;
+    display: block;
+    margin-top: 14px;
   }
 
   .main-content {
     width: 100%;
     padding: 12px;
-  }
-
-  .grid-view {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
-  }
-
-  .file-item {
-    border-radius: 8px;
-  }
-
-  .file-thumb {
-    height: 80px;
-    margin-bottom: 6px;
-  }
-
-  .file-info p {
-    font-size: 12px;
-  }
-
-  .file-actions {
-    gap: 4px;
-  }
-
-  .file-actions button {
-    padding: 4px 6px;
-    font-size: 12px;
+    position: relative;
   }
 
   header {
-    flex-direction: column;
+    position: sticky;
+    top: 0;
+    z-index: 1200;
+    margin-bottom: 16px;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(245, 247, 251, 0.95);
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 10px;
-    padding: 12px;
+  }
+
+  .main-content.dark header {
+    background: rgba(35, 35, 42, 0.97);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  .mobile-sidebar-toggle {
+    display: inline-flex;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .mobile-sidebar-toggle img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .main-content.dark .mobile-sidebar-toggle {
+    background: #2a2a33;
+    border-color: #3a3a47;
   }
 
   .search-bar {
     width: 100%;
-    order: 2;
+    order: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .search-bar input {
     width: 100% !important;
+    min-width: 0;
     font-size: 16px;
     padding: 10px;
+  }
+
+  .header-filter {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .header-filter label {
     font-size: 12px;
   }
 
-  .header-right {
+  .header-filter select {
     width: 100%;
+  }
+
+  .header-right {
+    order: 2;
+    margin-left: auto;
+    width: auto;
     display: flex;
-    justify-content: space-between;
     align-items: center;
     gap: 8px;
   }
 
   .mobile-upload-btn {
-    display: flex !important;
+    display: inline-flex !important;
     padding: 8px 12px !important;
     font-size: 12px !important;
   }
 
   .cloud-icon {
-    display: inline-block !important;
-    font-size: 22px;
+    display: none !important;
+  }
+
+  .grid-view {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .file-item {
+    border-radius: 10px;
+  }
+
+  .file-thumb {
+    height: auto;
+    margin-bottom: 0;
+    aspect-ratio: 1 / 1;
+    border-radius: 10px;
+  }
+
+  .file-icon {
+    height: auto;
+    min-height: 92px;
+    aspect-ratio: 1 / 1;
+    border-radius: 10px;
+    font-size: 34px;
+    padding: 0;
+  }
+
+  .favorite-toggle-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    top: 6px;
+    right: 6px;
+  }
+
+  .favorite-heart-icon {
+    width: 16px;
+    height: 16px;
   }
 
   .files-header {
@@ -2072,32 +2188,19 @@ td button:nth-child(7):hover {
 
 /* Mobile - Small (480px - 599px) */
 @media (max-width: 599px) {
-  .grid-view {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
-  }
-
   .main-content {
     padding: 10px;
   }
 
-  .sidebar {
-    padding: 10px;
-  }
-
-  .sidebar .logo span {
-    font-size: 14px;
-  }
-
   header {
-    padding: 10px;
+    padding: 8px;
     gap: 8px;
   }
 
   .search-bar input {
     padding: 10px !important;
-    border-radius: 6px;
-    font-size: 16px;
+    border-radius: 8px;
+    font-size: 15px;
   }
 
   .mobile-upload-btn {
@@ -2105,12 +2208,8 @@ td button:nth-child(7):hover {
     font-size: 11px !important;
   }
 
-  .cloud-icon {
-    font-size: 20px;
-  }
-
-  .files-header {
-    gap: 8px;
+  .grid-view {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .files-header h2 {
@@ -2126,19 +2225,6 @@ td button:nth-child(7):hover {
     padding: 6px;
   }
 
-  .file-thumb {
-    height: 70px;
-  }
-
-  .file-info p {
-    font-size: 11px;
-  }
-
-  .file-actions button {
-    padding: 4px 5px;
-    font-size: 11px;
-  }
-
   .upload-zone p {
     font-size: 12px;
   }
@@ -2147,20 +2233,12 @@ td button:nth-child(7):hover {
     font-size: 12px;
   }
 
-  /* Button adjustments */
-  button {
-    padding: 8px 12px;
-    font-size: 12px;
-  }
-
-  /* Modal adjustments */
   .hamburger-dropdown {
     right: -10px !important;
     top: 50px !important;
     min-width: 180px !important;
   }
 
-  /* Footer adjustments */
   footer {
     margin-top: 40px;
     padding: 20px 10px;
@@ -2174,11 +2252,6 @@ td button:nth-child(7):hover {
 
 /* Extra Small Mobile (< 480px) */
 @media (max-width: 479px) {
-  .grid-view {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
-  }
-
   body {
     font-size: 13px;
   }
@@ -2187,19 +2260,9 @@ td button:nth-child(7):hover {
     padding: 8px;
   }
 
-  .sidebar {
-    padding: 8px;
-    gap: 8px;
-  }
-
   header {
     padding: 8px;
     gap: 6px;
-  }
-
-  .search-bar {
-    width: 100%;
-    order: 3;
   }
 
   .search-bar input {
@@ -2209,9 +2272,7 @@ td button:nth-child(7):hover {
   }
 
   .header-right {
-    width: 100%;
-    justify-content: space-between;
-    order: 2;
+    gap: 6px;
   }
 
   .mobile-upload-btn {
@@ -2219,38 +2280,15 @@ td button:nth-child(7):hover {
     font-size: 10px !important;
   }
 
-  .cloud-icon {
-    font-size: 18px;
+  .grid-view {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
   }
 
   .files-header h2 {
     font-size: 14px;
   }
 
-  .file-thumb {
-    height: 60px;
-  }
-
-  .file-info p {
-    font-size: 10px;
-    line-height: 1.2;
-  }
-
-  .file-actions {
-    gap: 2px;
-  }
-
-  .file-actions button {
-    padding: 3px 4px;
-    font-size: 10px;
-  }
-
-  button {
-    padding: 6px 10px;
-    font-size: 11px;
-  }
-
-  /* Hide less important UI elements on very small screens */
   .breadcrumb {
     display: none;
   }
@@ -2267,7 +2305,7 @@ td button:nth-child(7):hover {
 }
 
 /* Tablet Horizontal Scroll Fix */
-@media (max-width: 1023px) {
+@media (min-width: 768px) and (max-width: 1023px) {
   .sidebar nav ul {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
