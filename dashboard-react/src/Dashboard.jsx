@@ -1442,50 +1442,35 @@ useEffect(() => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
-                  {showHeaderSortFilter && (
+                  {showHeaderSortFilter && !isMobileViewport && (
                     <div className="header-filter header-filter-inline">
-                      <label htmlFor="file-sort-select">Sort:</label>
+                      <label htmlFor="file-filter-mode-select">Filter:</label>
                       <select
-                        id="file-sort-select"
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
+                        id="file-filter-mode-select"
+                        value={filterMode}
+                        onChange={(e) => setFilterMode(e.target.value)}
                       >
-                        <option value="name">Name</option>
-                        <option value="type">Type</option>
-                        <option value="size">Size</option>
+                        <option value="all">All</option>
+                        <option value="specific">Type</option>
                       </select>
 
-                      {!isMobileViewport && (
-                        <>
-                          <label htmlFor="file-filter-mode-select">Filter:</label>
-                          <select
-                            id="file-filter-mode-select"
-                            value={filterMode}
-                            onChange={(e) => setFilterMode(e.target.value)}
-                          >
-                            <option value="all">All</option>
-                            <option value="specific">Type</option>
-                          </select>
-
-                          {filterMode === 'specific' && (
-                            <select
-                              id="file-filter-type-select"
-                              value={selectedFilterType}
-                              onChange={(e) => setSelectedFilterType(e.target.value)}
-                              disabled={availableFileTypes.length === 0}
-                            >
-                              {availableFileTypes.length === 0 ? (
-                                <option value="all">No types</option>
-                              ) : (
-                                availableFileTypes.map((type) => (
-                                  <option key={type} value={type}>
-                                    {type}
-                                  </option>
-                                ))
-                              )}
-                            </select>
+                      {filterMode === 'specific' && (
+                        <select
+                          id="file-filter-type-select"
+                          value={selectedFilterType}
+                          onChange={(e) => setSelectedFilterType(e.target.value)}
+                          disabled={availableFileTypes.length === 0}
+                        >
+                          {availableFileTypes.length === 0 ? (
+                            <option value="all">No types</option>
+                          ) : (
+                            availableFileTypes.map((type) => (
+                              <option key={type} value={type}>
+                                {type}
+                              </option>
+                            ))
                           )}
-                        </>
+                        </select>
                       )}
                     </div>
                   )}
@@ -2075,10 +2060,7 @@ useEffect(() => {
                   >
                     <Hamster />
                     {isMobileViewport && (
-                      <div className="mobile-upload-brand" aria-hidden="true">
-                        <span className="mobile-upload-brand-text">CloudBox</span>
-                        <img src="/logo.png" alt="" className="mobile-upload-logo" />
-                      </div>
+                      <img src="/logo.png" alt="" className="mobile-upload-logo-corner" aria-hidden="true" />
                     )}
                     <p className="upload-box-subheading">Drag & drop files here or click to upload files</p>
                   </div>

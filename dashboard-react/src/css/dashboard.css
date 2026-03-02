@@ -829,27 +829,8 @@ td button:nth-child(7):hover {
   text-align: center;
 }
 
-.mobile-upload-brand {
+.mobile-upload-logo-corner {
   display: none;
-}
-
-.mobile-upload-brand-text {
-  font-size: 14px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.main-content.dark .mobile-upload-brand-text {
-  color: #e5e5e5;
-}
-
-.mobile-upload-logo {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-  border: none !important;
-  box-shadow: none !important;
-  background: transparent !important;
 }
 
 .upload-zone input {
@@ -2236,8 +2217,8 @@ td button:nth-child(7):hover {
   }
 
   .grid-view {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 4px;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 3px;
   }
 
   .file-item {
@@ -2304,6 +2285,7 @@ td button:nth-child(7):hover {
   .upload-zone {
     padding: 10px 8px;
     font-size: 13px;
+    position: relative;
   }
 
   .upload-box-wrap {
@@ -2326,25 +2308,18 @@ td button:nth-child(7):hover {
     font-size: 11px;
   }
 
-  .mobile-upload-brand {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    margin: 2px auto 6px;
-  }
-
-  .mobile-upload-brand-text {
-    font-size: 13px;
-  }
-
-  .mobile-upload-logo {
-    width: 30px;
-    height: 30px;
+  .mobile-upload-logo-corner {
+    display: block;
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 28px;
+    height: 28px;
     object-fit: contain;
     border: none !important;
     box-shadow: none !important;
     background: transparent !important;
+    z-index: 2;
   }
 
   .upload-box-subheading {
@@ -2419,7 +2394,8 @@ td button:nth-child(7):hover {
   }
 
   .grid-view {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(6, 1fr);
+    gap: 3px;
   }
 
   .files-header h2 {
@@ -2520,8 +2496,8 @@ td button:nth-child(7):hover {
   }
 
   .grid-view {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
   }
 
   .files-header h2 {
