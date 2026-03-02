@@ -7,7 +7,6 @@ import "./css/dashboard.css";
 import Chart from "chart.js/auto";
 import Switch from "./Switch";
 import Checkbox from "./Checkbox";
-import NeonCheckbox from "./columnbox";
 import Hamster from "./css/Hamster";
 import Uploadloader from "./css/Uploadloader";
 import { getApiErrorMessage, readApiResponse } from "./http";
@@ -975,19 +974,6 @@ useEffect(() => {
     }
   };
 
-  const toggleRowSelection = (rowFileIds) => {
-    const allInRowSelected = rowFileIds.every(id => selectedFileIds.includes(id));
-    if (allInRowSelected) {
-      // Deselect all in row
-      setSelectedFileIds(selectedFileIds.filter(id => !rowFileIds.includes(id)));
-    } else {
-      // Select all in row
-      const newSelected = new Set(selectedFileIds);
-      rowFileIds.forEach(id => newSelected.add(id));
-      setSelectedFileIds([...newSelected]);
-    }
-  };
-
   const handleBulkDelete = async () => {
     if (selectedFileIds.length === 0) {
       showNotification('No files selected');
@@ -1326,7 +1312,6 @@ useEffect(() => {
   const showMobileHeaderControls = isMobileViewport && isLibrarySection;
   const showHeaderControls = !isMobileViewport || showMobileHeaderControls;
   const showHeaderSortFilter = !isMobileViewport ? activeSection === 'files' : isLibrarySection;
-  const rowChunkSize = isMobileViewport ? 3 : 4;
 
   return (
     <div className={`dashboard fade-in${isDarkMode ? ' dark' : ''}`}> 
@@ -1512,8 +1497,8 @@ useEffect(() => {
                     className="hamburger-btn"
                     onClick={() => setIsHamburgerOpen(!isHamburgerOpen)}
                     style={{
-                      width: isMobileViewport ? '36px' : '48px',
-                      height: isMobileViewport ? '36px' : '48px',
+                      width: isMobileViewport ? '34px' : '44px',
+                      height: isMobileViewport ? '34px' : '44px',
                       borderRadius: '50%',
                       border: isMobileViewport ? '1px solid #d1d5db' : '2px solid #e5e7eb',
                       background: profilePhoto ? 'transparent' : '#e5e7eb',
@@ -1530,7 +1515,7 @@ useEffect(() => {
                     {profilePhoto ? (
                       <img src={profilePhoto} alt="Profile" style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', display: 'block'}} />
                     ) : (
-                      <span style={{fontSize: isMobileViewport ? '18px' : '24px'}}>👤</span>
+                      <span style={{fontSize: isMobileViewport ? '16px' : '22px'}}>👤</span>
                     )}
                   </button>
 
@@ -1538,7 +1523,7 @@ useEffect(() => {
                   {isHamburgerOpen && (
                     <div className="hamburger-dropdown" style={{
                       position: 'absolute',
-                      top: '65px',
+                      top: isMobileViewport ? '52px' : '65px',
                       right: '0',
                       background: isDarkMode ? '#2a2a33' : 'white',
                       border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
@@ -2048,7 +2033,14 @@ useEffect(() => {
                     onClick={openFilePicker}
                     style={{ cursor: 'pointer' }}
                   >
-                    <Hamster />
+                    {isMobileViewport ? (
+                      <div className="mobile-upload-hero" aria-hidden="true">
+                        <span className="mobile-upload-cloud">☁️</span>
+                        <img src="/logo.png" alt="" className="mobile-upload-logo" />
+                      </div>
+                    ) : (
+                      <Hamster />
+                    )}
                     <p className="upload-box-subheading">Drag & drop files here or click to upload files</p>
                   </div>
 
@@ -2157,101 +2149,44 @@ useEffect(() => {
                         <h3 className="date-header">{date}</h3>
                         <div style={{position: 'relative'}}>
                           {selectMode ? (
-                            // Select Mode: Show grid with row-based checkboxes
-                            (() => {
-                              const files = groupedByDate[date];
-                              const rows = [];
-                              for (let i = 0; i < files.length; i += rowChunkSize) {
-                                rows.push(files.slice(i, i + rowChunkSize));
-                              }
-                              
-                              return (
-                                <div style={{position: 'relative'}}>
-                                  {rows.map((rowFiles, rowIndex) => {
-                                    const rowFileIds = rowFiles.map(f => f._id);
-                                    const selectedInRow = rowFileIds.filter(id => selectedFileIds.includes(id)).length;
-                                    const allSelectedInRow = selectedInRow === rowFiles.length;
-                                    const someSelectedInRow = selectedInRow > 0 && selectedInRow < rowFiles.length;
-                                    
-                                    return (
-                                      <div
-                                        key={rowIndex}
-                                        style={{
-                                          display: 'flex',
-                                          marginBottom: '16px',
-                                          gap: isMobileViewport ? '10px' : '16px',
-                                          alignItems: 'center',
-                                          position: 'relative'
-                                        }}
-                                      >
-                                        {/* Row Group Checkbox - Show for all rows */}
-                                        <div
-                                            style={{
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                minWidth: '30px',
-                                                flexShrink: 0
-                                            }}
-                                        >
-                                            <NeonCheckbox
-                                                checked={selectedInRow > 0}
-                                                onChange={() => toggleRowSelection(rowFileIds)}
-                                            />
-                                        </div>
-
-                                        {/* Grid of files with responsive columns */}
-                                        <div style={{
-                                          display: 'grid',
-                                          gridTemplateColumns: `repeat(${Math.min(rowFiles.length, rowChunkSize)}, minmax(0, 1fr))`,
-                                          gap: isMobileViewport ? '6px' : '12px',
-                                          width: '100%',
-                                          maxWidth: isMobileViewport ? '100%' : `calc(25% * ${Math.min(rowFiles.length, rowChunkSize)})`
-                                        }}>
-                                          {rowFiles.map((file, fileIndex) => {
-                                            const isSelected = selectedFileIds.includes(file._id);
-                                            return (
-                                              <div 
-                                                key={fileIndex} 
-                                                className="file-item"
-                                                style={{
-                                                  position: 'relative',
-                                                  opacity: isSelected ? 0.8 : 1,
-                                                  boxShadow: isSelected ? '0 0 0 3px #3b82f6' : 'none',
-                                                  borderRadius: '8px',
-                                                  overflow: 'hidden'
-                                                }}
-                                              >
-                                                <div style={{position: 'absolute', top: '12px', right: '12px', zIndex: 20}}>
-                                                  <input
-                                                    type="checkbox"
-                                                    checked={isSelected}
-                                                    onChange={() => toggleFileSelection(file._id)}
-                                                    id={`file-${file._id}`}
-                                                    className="file-select-checkbox"
-                                                    aria-label={`Select ${file.name}`}
-                                                  />
-                                                </div>
-                                                <div style={{position: 'relative'}}>
-                                                  {file.isImage ? (
-                                                    <img src={file.url} alt={file.name} className="file-thumb" style={{cursor: 'default'}} />
-                                                  ) : file.isVideo ? (
-                                                    <video src={file.url} className="file-thumb" style={{cursor: 'default'}} />
-                                                  ) : (
-                                                    <div className="file-icon">📄</div>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })()
+                            // Select Mode: checkbox shown at top-right of each file card
+                            <div className="grid-view">
+                              {groupedByDate[date].map((file, fileIndex) => {
+                                const isSelected = selectedFileIds.includes(file._id);
+                                return (
+                                  <div
+                                    key={fileIndex}
+                                    className="file-item"
+                                    style={{
+                                      position: 'relative',
+                                      opacity: isSelected ? 0.85 : 1,
+                                      boxShadow: isSelected ? '0 0 0 3px #3b82f6' : 'none',
+                                      borderRadius: '8px',
+                                      overflow: 'hidden'
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => toggleFileSelection(file._id)}
+                                      id={`file-${file._id}`}
+                                      className="file-select-checkbox"
+                                      aria-label={`Select ${file.name}`}
+                                      style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 20 }}
+                                    />
+                                    <div style={{position: 'relative'}}>
+                                      {file.isImage ? (
+                                        <img src={file.url} alt={file.name} className="file-thumb" style={{cursor: 'default'}} />
+                                      ) : file.isVideo ? (
+                                        <video src={file.url} className="file-thumb" style={{cursor: 'default'}} />
+                                      ) : (
+                                        <div className="file-icon">{"\uD83D\uDCC4"}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           ) : (
                             // Normal Mode: Show standard grid view
                             <div className="grid-view">
