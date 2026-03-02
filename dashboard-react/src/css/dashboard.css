@@ -2019,14 +2019,15 @@ td button:nth-child(7):hover {
     top: 0;
     z-index: 1200;
     margin-bottom: 16px;
-    padding: 10px;
+    padding: 6px 8px;
     border-radius: 12px;
     background: rgba(245, 247, 251, 0.95);
     box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: 10px;
+    gap: 4px;
+    overflow: hidden;
   }
 
   .main-content.dark header {
@@ -2036,14 +2037,14 @@ td button:nth-child(7):hover {
 
   .mobile-sidebar-toggle {
     display: inline-flex;
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
     border: 1px solid #d1d5db;
     background: #ffffff;
     align-items: center;
     justify-content: center;
-    padding: 6px;
+    padding: 4px;
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -2060,48 +2061,66 @@ td button:nth-child(7):hover {
   }
 
   .search-bar {
-    width: 100%;
-    order: 3;
+    width: auto;
+    order: 0;
+    flex: 1;
+    min-width: 0;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
   }
 
   .search-bar input {
-    width: 100% !important;
-    min-width: 0;
-    font-size: 16px;
-    padding: 10px;
+    width: auto !important;
+    flex: 1 1 auto;
+    min-width: 64px;
+    font-size: 12px;
+    padding: 6px 8px;
   }
 
   .header-filter {
-    width: 100%;
+    width: auto;
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: repeat(2, auto);
+    gap: 4px;
+    align-items: center;
+    flex-shrink: 0;
   }
 
   .header-filter label {
-    font-size: 12px;
+    display: none;
   }
 
   .header-filter select {
-    width: 100%;
+    width: 58px;
+    min-width: 58px;
+    padding: 4px 5px;
+    font-size: 10px;
+    border-radius: 6px;
+  }
+
+  #file-filter-type-select {
+    display: none;
   }
 
   .header-right {
-    order: 2;
-    margin-left: auto;
+    order: 0;
+    margin-left: 0;
     width: auto;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .header-right .hamburger-btn {
+    width: 36px !important;
+    height: 36px !important;
   }
 
   .mobile-upload-btn {
-    display: inline-flex !important;
-    padding: 8px 12px !important;
-    font-size: 12px !important;
+    display: none !important;
   }
 
   .cloud-icon {
@@ -2193,19 +2212,41 @@ td button:nth-child(7):hover {
   }
 
   header {
-    padding: 8px;
-    gap: 8px;
+    padding: 5px 6px;
+    gap: 3px;
+  }
+
+  .mobile-sidebar-toggle {
+    width: 28px;
+    height: 28px;
+    padding: 3px;
   }
 
   .search-bar input {
-    padding: 10px !important;
-    border-radius: 8px;
-    font-size: 15px;
+    min-width: 52px;
+    padding: 4px 6px !important;
+    border-radius: 6px;
+    font-size: 11px;
   }
 
-  .mobile-upload-btn {
-    padding: 8px 10px !important;
-    font-size: 11px !important;
+  .header-filter {
+    gap: 3px;
+  }
+
+  .header-filter select {
+    width: 52px;
+    min-width: 52px;
+    font-size: 10px;
+    padding: 3px 4px;
+  }
+
+  .header-right {
+    gap: 3px;
+  }
+
+  .header-right .hamburger-btn {
+    width: 32px !important;
+    height: 32px !important;
   }
 
   .grid-view {
@@ -2261,23 +2302,36 @@ td button:nth-child(7):hover {
   }
 
   header {
-    padding: 8px;
-    gap: 6px;
+    padding: 4px 5px;
+    gap: 2px;
+  }
+
+  .mobile-sidebar-toggle {
+    width: 26px;
+    height: 26px;
+    padding: 3px;
   }
 
   .search-bar input {
-    width: 100% !important;
-    padding: 8px !important;
-    font-size: 14px;
+    min-width: 44px;
+    padding: 3px 5px !important;
+    font-size: 10px;
+  }
+
+  .header-filter select {
+    width: 48px;
+    min-width: 48px;
+    font-size: 9px;
+    padding: 3px 4px;
   }
 
   .header-right {
-    gap: 6px;
+    gap: 2px;
   }
 
-  .mobile-upload-btn {
-    padding: 6px 10px !important;
-    font-size: 10px !important;
+  .header-right .hamburger-btn {
+    width: 30px !important;
+    height: 30px !important;
   }
 
   .grid-view {

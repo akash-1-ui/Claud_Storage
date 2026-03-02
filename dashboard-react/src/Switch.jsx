@@ -1,9 +1,11 @@
 import React from 'react';
 import './css/switch.css';
 
-const Switch = ({ isDarkMode, onChange }) => {
+const Switch = ({ isDarkMode, onChange, toggleSize }) => {
+  const themeSwitchStyle = toggleSize ? { "--toggle-size": toggleSize } : undefined;
+
   return (
-    <label className="theme-switch">
+    <label className="theme-switch" style={themeSwitchStyle}>
       <input 
         type="checkbox" 
         className="theme-switch__checkbox" 

@@ -1122,8 +1122,15 @@ useEffect(() => {
     e.target.value = "";
   };
 
+  const headerFilterSourceFiles =
+    activeSection === 'favorites'
+      ? favorites
+      : activeSection === 'trash'
+        ? trashedFiles
+        : files;
+
   const availableFileTypes = Array.from(
-    new Set(files.map((file) => file.type).filter(Boolean))
+    new Set(headerFilterSourceFiles.map((file) => file.type).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
   useEffect(() => {
@@ -1141,7 +1148,7 @@ useEffect(() => {
     setSelectedFilterType(availableFileTypes[0] || 'all');
   }, [filterMode, selectedFilterType, availableFileTypes]);
 
-  const filteredFiles = files.filter((file) => {
+  const applySearchAndFilter = (incomingFiles = []) => incomingFiles.filter((file) => {
     const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType =
       filterMode === 'all' ||
@@ -1149,7 +1156,7 @@ useEffect(() => {
     return matchesSearch && matchesType;
   });
 
-  const sortedFiles = [...filteredFiles].sort((a, b) => {
+  const sortFileItems = (incomingFiles = []) => [...incomingFiles].sort((a, b) => {
     switch (sortBy) {
       case 'name':
         return a.name.localeCompare(b.name);
@@ -1163,6 +1170,13 @@ useEffect(() => {
         return a.name.localeCompare(b.name);
     }
   });
+
+  const filteredFiles = applySearchAndFilter(files);
+  const sortedFiles = sortFileItems(filteredFiles);
+  const filteredFavorites = applySearchAndFilter(favorites);
+  const sortedFavorites = sortFileItems(filteredFavorites);
+  const filteredTrashedFiles = applySearchAndFilter(trashedFiles);
+  const sortedTrashedFiles = sortFileItems(filteredTrashedFiles);
 
   // Calculate storage from files as fallback
   const calculateStorageFromFiles = () => {
@@ -1308,6 +1322,10 @@ useEffect(() => {
   const selectedIsFavorite = selectedFileDetails
     ? favorites.some((fav) => fav._id === selectedFileDetails._id)
     : false;
+  const isLibrarySection = ['files', 'favorites', 'trash'].includes(activeSection);
+  const showMobileHeaderControls = isMobileViewport && isLibrarySection;
+  const showHeaderControls = !isMobileViewport || showMobileHeaderControls;
+  const showHeaderSortFilter = !isMobileViewport ? activeSection === 'files' : isLibrarySection;
   const rowChunkSize = isMobileViewport ? 3 : 4;
 
   return (
@@ -1425,131 +1443,119 @@ useEffect(() => {
           >
             <img src="/logo.png" alt="" aria-hidden="true" />
           </button>
-          <div className="search-bar">
-            <label htmlFor="search-input" style={{display:'none'}}>Search files</label>
-            <input
-              id="search-input"
-              name="search"
-              type="text"
-              placeholder="Search files..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {activeSection === 'files' && (
-              <div className="header-filter">
-                <label htmlFor="file-sort-select">Sort:</label>
-                <select
-                  id="file-sort-select"
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                >
-                  <option value="name">Name</option>
-                  <option value="type">Type</option>
-                  <option value="size">Size</option>
-                </select>
+          {showHeaderControls && (
+            <>
+              <div className="search-bar">
+                <label htmlFor="search-input" style={{display:'none'}}>Search files</label>
+                <input
+                  id="search-input"
+                  name="search"
+                  type="text"
+                  placeholder="Search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {showHeaderSortFilter && (
+                  <div className="header-filter">
+                    <label htmlFor="file-sort-select">Sort:</label>
+                    <select
+                      id="file-sort-select"
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                    >
+                      <option value="name">Name</option>
+                      <option value="type">Type</option>
+                      <option value="size">Size</option>
+                    </select>
 
-                <label htmlFor="file-filter-mode-select">Filter:</label>
-                <select
-                  id="file-filter-mode-select"
-                  value={filterMode}
-                  onChange={(e) => setFilterMode(e.target.value)}
-                >
-                  <option value="all">All Files</option>
-                  <option value="specific">Specific Type</option>
-                </select>
+                    <label htmlFor="file-filter-mode-select">Filter:</label>
+                    <select
+                      id="file-filter-mode-select"
+                      value={filterMode}
+                      onChange={(e) => setFilterMode(e.target.value)}
+                    >
+                      <option value="all">All</option>
+                      <option value="specific">Type</option>
+                    </select>
 
-                {filterMode === 'specific' && (
-                  <select
-                    id="file-filter-type-select"
-                    value={selectedFilterType}
-                    onChange={(e) => setSelectedFilterType(e.target.value)}
-                    disabled={availableFileTypes.length === 0}
-                  >
-                    {availableFileTypes.length === 0 ? (
-                      <option value="all">No file types</option>
-                    ) : (
-                      availableFileTypes.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))
+                    {filterMode === 'specific' && (
+                      <select
+                        id="file-filter-type-select"
+                        value={selectedFilterType}
+                        onChange={(e) => setSelectedFilterType(e.target.value)}
+                        disabled={availableFileTypes.length === 0}
+                      >
+                        {availableFileTypes.length === 0 ? (
+                          <option value="all">No types</option>
+                        ) : (
+                          availableFileTypes.map((type) => (
+                            <option key={type} value={type}>
+                              {type}
+                            </option>
+                          ))
+                        )}
+                      </select>
                     )}
-                  </select>
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-          <div className="header-right">
-            {/* Cloud Icon for mobile */}
-            <span 
-              className="cloud-icon"
-              title="Upload files"
-              onClick={openFilePicker}
-            >
-              ☁️
-            </span>
+              <div className="header-right">
+                <Switch
+                  isDarkMode={isDarkMode}
+                  onChange={toggleTheme}
+                  toggleSize={isMobileViewport ? '8px' : undefined}
+                />
+                
+                {/* Hamburger Menu */}
+                <div className="hamburger-menu">
+                  <button 
+                    className="hamburger-btn"
+                    onClick={() => setIsHamburgerOpen(!isHamburgerOpen)}
+                    style={{
+                      width: isMobileViewport ? '36px' : '48px',
+                      height: isMobileViewport ? '36px' : '48px',
+                      borderRadius: '50%',
+                      border: isMobileViewport ? '1px solid #d1d5db' : '2px solid #e5e7eb',
+                      background: profilePhoto ? 'transparent' : '#e5e7eb',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      padding: 0,
+                      flexShrink: 0
+                    }}
+                  >
+                    {profilePhoto ? (
+                      <img src={profilePhoto} alt="Profile" style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', display: 'block'}} />
+                    ) : (
+                      <span style={{fontSize: isMobileViewport ? '18px' : '24px'}}>👤</span>
+                    )}
+                  </button>
 
-            {/* Mobile Upload Button */}
-            <button
-              className="mobile-upload-btn"
-              onClick={openFilePicker}
-              title="Upload files"
-            >
-              ☁️ Upload
-            </button>
-
-            <Switch isDarkMode={isDarkMode} onChange={toggleTheme} />
-            
-            {/* Hamburger Menu */}
-            <div className="hamburger-menu">
-              <button 
-                className="hamburger-btn"
-                onClick={() => setIsHamburgerOpen(!isHamburgerOpen)}
-                style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50%',
-                  border: '2px solid #e5e7eb',
-                  background: profilePhoto ? 'transparent' : '#e5e7eb',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  position: 'relative',
-                  padding: 0,
-                  flexShrink: 0
-                }}
-              >
-                {profilePhoto ? (
-                  <img src={profilePhoto} alt="Profile" style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', display: 'block'}} />
-                ) : (
-                  <span style={{fontSize: '24px'}}>👤</span>
-                )}
-              </button>
-
-              {/* Dropdown Menu */}
-              {isHamburgerOpen && (
-                <div className="hamburger-dropdown" style={{
-                  position: 'absolute',
-                  top: '65px',
-                  right: '0',
-                  background: isDarkMode ? '#2a2a33' : 'white',
-                  border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  minWidth: '220px',
-                  zIndex: 1000,
-                  overflow: 'hidden'
-                }}>
-                  <div style={{
-                    padding: '12px 16px',
-                    borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
-                    color: isDarkMode ? '#e5e5e5' : '#222'
-                  }}>
-                    <p style={{margin: '0 0 4px 0', fontWeight: 600}}>Welcome back!</p>
-                    <p style={{margin: '0', fontSize: '13px', color: isDarkMode ? '#9ca3af' : '#6b7280'}}>{userName}</p>
-                  </div>
+                  {/* Dropdown Menu */}
+                  {isHamburgerOpen && (
+                    <div className="hamburger-dropdown" style={{
+                      position: 'absolute',
+                      top: '65px',
+                      right: '0',
+                      background: isDarkMode ? '#2a2a33' : 'white',
+                      border: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      minWidth: '220px',
+                      zIndex: 1000,
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        padding: '12px 16px',
+                        borderBottom: `1px solid ${isDarkMode ? '#3a3a47' : '#e5e7eb'}`,
+                        color: isDarkMode ? '#e5e5e5' : '#222'
+                      }}>
+                        <p style={{margin: '0 0 4px 0', fontWeight: 600}}>Welcome back!</p>
+                        <p style={{margin: '0', fontSize: '13px', color: isDarkMode ? '#9ca3af' : '#6b7280'}}>{userName}</p>
+                      </div>
 
                   <button
                     onClick={() => {
@@ -1708,10 +1714,12 @@ useEffect(() => {
                   >
                     Logout
                   </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+            </>
+          )}
         </header>
 
         {/* Profile Photo Upload Modal */}
@@ -2354,13 +2362,13 @@ useEffect(() => {
               <span>Favorites</span>
             </div>
             <h2>Favorites</h2>
-            {favorites.length === 0 ? (
+            {sortedFavorites.length === 0 ? (
               <div style={{padding: '40px', textAlign: 'center', color: '#9ca3af'}}>
                 <p>No favorites yet. Click the heart icon on files to add them here.</p>
               </div>
             ) : (
               <div className="grid-view">
-                {favorites.map((file, index) => {
+                {sortedFavorites.map((file, index) => {
                   const isSelected = selectedFileIds.includes(file._id);
                   return (
                     <div
@@ -2411,11 +2419,11 @@ useEffect(() => {
           <section className={`files${isDarkMode ? ' dark' : ''}`}>
             <h2>Trash</h2>
             <p style={{color: '#6b7280', marginTop: '10px', fontSize: '14px'}}>Trashed files will be permanently deleted after 24 hours.</p>
-            {trashedFiles.length === 0 ? (
+            {sortedTrashedFiles.length === 0 ? (
               <p style={{color: '#6b7280', marginTop: '20px'}}>Trash is empty.</p>
             ) : (
               <div className="grid-view" style={{marginTop: '20px'}}>
-                {trashedFiles.map((file) => {
+                {sortedTrashedFiles.map((file) => {
                   const now = new Date().getTime();
                   const parsedDeletedAt = new Date(file.deletedAt || 0).getTime();
                   const deletedAtMs = Number.isFinite(parsedDeletedAt) ? parsedDeletedAt : now;
