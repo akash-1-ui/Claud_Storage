@@ -50,6 +50,9 @@ function Dashboard() {
   const { completeAuthTransition } = useAuthTransition();
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
+  const filePickerRef = useRef(null);
+  const mobileTapStateRef = useRef({ fileId: null, timestamp: 0 });
+  const pendingMobileOpenRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
@@ -264,6 +267,15 @@ useEffect(() => {
 useEffect(() => {
   setFavorites(files.filter((file) => file.isFavorite));
 }, [files]);
+
+useEffect(() => {
+  return () => {
+    if (pendingMobileOpenRef.current) {
+      window.clearTimeout(pendingMobileOpenRef.current);
+      pendingMobileOpenRef.current = null;
+    }
+  };
+}, []);
 
 
   const logout = () => {
@@ -1296,13 +1308,60 @@ useEffect(() => {
   };
 
   const openFilePicker = () => {
-    const picker = document.getElementById('file-upload-input');
+    const picker = filePickerRef.current;
     if (picker) {
-      picker.click();
+      picker.value = "";
+      try {
+        if (typeof picker.showPicker === 'function') {
+          picker.showPicker();
+        } else {
+          picker.click();
+        }
+      } catch {
+        picker.click();
+      }
     }
     if (isMobileViewport) {
       setIsMobileSidebarOpen(false);
     }
+  };
+
+  const handleFileCardTap = (file) => {
+    if (!file) return;
+
+    if (!isMobileViewport) {
+      openFileDetailsModal(file);
+      return;
+    }
+
+    const now = Date.now();
+    const targetId = file._id || file.url || file.name;
+    const previousTap = mobileTapStateRef.current;
+    const isDoubleTap =
+      previousTap.fileId === targetId &&
+      now - previousTap.timestamp <= 300;
+
+    if (isDoubleTap) {
+      if (pendingMobileOpenRef.current) {
+        window.clearTimeout(pendingMobileOpenRef.current);
+        pendingMobileOpenRef.current = null;
+      }
+      mobileTapStateRef.current = { fileId: null, timestamp: 0 };
+      handleToggleFavorite(file);
+      return;
+    }
+
+    mobileTapStateRef.current = { fileId: targetId, timestamp: now };
+
+    if (pendingMobileOpenRef.current) {
+      window.clearTimeout(pendingMobileOpenRef.current);
+      pendingMobileOpenRef.current = null;
+    }
+
+    pendingMobileOpenRef.current = window.setTimeout(() => {
+      openFileDetailsModal(file);
+      pendingMobileOpenRef.current = null;
+    }, 280);
   };
 
   const selectedIsFavorite = selectedFileDetails
@@ -2115,6 +2174,7 @@ useEffect(() => {
                 name="file-upload"
                 type="file"
                 multiple
+                ref={filePickerRef}
                 style={{ display: 'none' }}
                 onChange={handleFileInput}
               />
@@ -2218,7 +2278,7 @@ useEffect(() => {
                                   <div 
                                     key={index} 
                                     className="file-item"
-                                    onClick={() => openFileDetailsModal(file)}
+                                    onClick={() => handleFileCardTap(file)}
                                     style={{
                                       position: 'relative',
                                       opacity: isSelected ? 0.8 : 1,
@@ -2236,19 +2296,21 @@ useEffect(() => {
                                       ) : (
                                         <div className="file-icon">📄</div>
                                       )}
-                                      <button
-                                        type="button"
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          handleToggleFavorite(file);
-                                        }}
-                                        className={`favorite-toggle-btn${isFavorited ? ' active' : ''}`}
-                                        title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-                                      >
-                                        <svg className="favorite-heart-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 16.5 3C19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                                        </svg>
-                                      </button>
+                                      {!isMobileViewport && (
+                                        <button
+                                          type="button"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            handleToggleFavorite(file);
+                                          }}
+                                          className={`favorite-toggle-btn${isFavorited ? ' active' : ''}`}
+                                          title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                                        >
+                                          <svg className="favorite-heart-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 16.5 3C19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                                          </svg>
+                                        </button>
+                                      )}
                                     </div></div>
                                 );
                               })}
@@ -2320,7 +2382,7 @@ useEffect(() => {
             <h2>Favorites</h2>
             {sortedFavorites.length === 0 ? (
               <div style={{padding: '40px', textAlign: 'center', color: '#9ca3af'}}>
-                <p>No favorites yet. Click the heart icon on files to add them here.</p>
+                <p>No favorites yet. Double-tap a photo on mobile or click the heart icon on desktop.</p>
               </div>
             ) : (
               <div className="grid-view">
@@ -2330,7 +2392,7 @@ useEffect(() => {
                     <div
                       key={index}
                       className="file-item"
-                      onClick={() => openFileDetailsModal(file)}
+                      onClick={() => handleFileCardTap(file)}
                       style={{
                         position: 'relative',
                         opacity: isSelected ? 0.8 : 1,
@@ -2348,19 +2410,21 @@ useEffect(() => {
                         ) : (
                           <div className="file-icon">{"\uD83D\uDCC4"}</div>
                         )}
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleToggleFavorite(file);
-                          }}
-                          className="favorite-toggle-btn active"
-                          title="Remove from favorites"
-                        >
-                          <svg className="favorite-heart-icon" viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 16.5 3C19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                          </svg>
-                        </button>
+                        {!isMobileViewport && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleToggleFavorite(file);
+                            }}
+                            className="favorite-toggle-btn active"
+                            title="Remove from favorites"
+                          >
+                            <svg className="favorite-heart-icon" viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 16.5 3C19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

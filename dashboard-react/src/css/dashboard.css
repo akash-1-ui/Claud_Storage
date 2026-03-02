@@ -2217,7 +2217,7 @@ td button:nth-child(7):hover {
   }
 
   .grid-view {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 3px;
   }
 
@@ -2253,6 +2253,10 @@ td button:nth-child(7):hover {
   .favorite-heart-icon {
     width: 16px;
     height: 16px;
+  }
+
+  .favorite-toggle-btn {
+    display: none !important;
   }
 
   .files-header {
@@ -2394,7 +2398,7 @@ td button:nth-child(7):hover {
   }
 
   .grid-view {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 3px;
   }
 
@@ -2496,7 +2500,7 @@ td button:nth-child(7):hover {
   }
 
   .grid-view {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 2px;
   }
 
