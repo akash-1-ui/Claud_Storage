@@ -1312,6 +1312,7 @@ useEffect(() => {
   const showMobileHeaderControls = isMobileViewport && isLibrarySection;
   const showHeaderControls = !isMobileViewport || showMobileHeaderControls;
   const showHeaderSortFilter = !isMobileViewport ? activeSection === 'files' : isLibrarySection;
+  const showMobileFilterRow = isMobileViewport && showHeaderSortFilter;
 
   return (
     <div className={`dashboard fade-in${isDarkMode ? ' dark' : ''}`}> 
@@ -1430,32 +1431,71 @@ useEffect(() => {
           </button>
           {showHeaderControls && (
             <>
-              <div className="search-bar">
-                <label htmlFor="search-input" style={{display:'none'}}>Search files</label>
-                <input
-                  id="search-input"
-                  name="search"
-                  type="text"
-                  placeholder="Search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                {showHeaderSortFilter && (
-                  <div className="header-filter">
-                    <label htmlFor="file-sort-select">Sort:</label>
-                    <select
-                      id="file-sort-select"
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value)}
-                    >
-                      <option value="name">Name</option>
-                      <option value="type">Type</option>
-                      <option value="size">Size</option>
-                    </select>
+              <div className="search-controls-stack">
+                <div className="search-bar">
+                  <label htmlFor="search-input" style={{display:'none'}}>Search files</label>
+                  <input
+                    id="search-input"
+                    name="search"
+                    type="text"
+                    placeholder="Search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {showHeaderSortFilter && (
+                    <div className="header-filter header-filter-inline">
+                      <label htmlFor="file-sort-select">Sort:</label>
+                      <select
+                        id="file-sort-select"
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                      >
+                        <option value="name">Name</option>
+                        <option value="type">Type</option>
+                        <option value="size">Size</option>
+                      </select>
 
-                    <label htmlFor="file-filter-mode-select">Filter:</label>
+                      {!isMobileViewport && (
+                        <>
+                          <label htmlFor="file-filter-mode-select">Filter:</label>
+                          <select
+                            id="file-filter-mode-select"
+                            value={filterMode}
+                            onChange={(e) => setFilterMode(e.target.value)}
+                          >
+                            <option value="all">All</option>
+                            <option value="specific">Type</option>
+                          </select>
+
+                          {filterMode === 'specific' && (
+                            <select
+                              id="file-filter-type-select"
+                              value={selectedFilterType}
+                              onChange={(e) => setSelectedFilterType(e.target.value)}
+                              disabled={availableFileTypes.length === 0}
+                            >
+                              {availableFileTypes.length === 0 ? (
+                                <option value="all">No types</option>
+                              ) : (
+                                availableFileTypes.map((type) => (
+                                  <option key={type} value={type}>
+                                    {type}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {showMobileFilterRow && (
+                  <div className="mobile-filter-row">
+                    <label htmlFor="file-filter-mode-select-mobile">Filter:</label>
                     <select
-                      id="file-filter-mode-select"
+                      id="file-filter-mode-select-mobile"
                       value={filterMode}
                       onChange={(e) => setFilterMode(e.target.value)}
                     >
@@ -1465,7 +1505,7 @@ useEffect(() => {
 
                     {filterMode === 'specific' && (
                       <select
-                        id="file-filter-type-select"
+                        id="file-filter-type-select-mobile"
                         value={selectedFilterType}
                         onChange={(e) => setSelectedFilterType(e.target.value)}
                         disabled={availableFileTypes.length === 0}
@@ -2033,13 +2073,12 @@ useEffect(() => {
                     onClick={openFilePicker}
                     style={{ cursor: 'pointer' }}
                   >
-                    {isMobileViewport ? (
-                      <div className="mobile-upload-hero" aria-hidden="true">
-                        <span className="mobile-upload-cloud">☁️</span>
+                    <Hamster />
+                    {isMobileViewport && (
+                      <div className="mobile-upload-brand" aria-hidden="true">
+                        <span className="mobile-upload-brand-text">CloudBox</span>
                         <img src="/logo.png" alt="" className="mobile-upload-logo" />
                       </div>
-                    ) : (
-                      <Hamster />
                     )}
                     <p className="upload-box-subheading">Drag & drop files here or click to upload files</p>
                   </div>
@@ -2172,7 +2211,7 @@ useEffect(() => {
                                       id={`file-${file._id}`}
                                       className="file-select-checkbox"
                                       aria-label={`Select ${file.name}`}
-                                      style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 20 }}
+                                      style={{ position: 'absolute', top: '8px', right: '8px', left: 'auto', zIndex: 20 }}
                                     />
                                     <div style={{position: 'relative'}}>
                                       {file.isImage ? (
