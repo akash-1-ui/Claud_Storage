@@ -338,17 +338,45 @@ body.auth-page {
     align-items: flex-start;
   }
 
+  .auth-container-login {
+    position: relative;
+    min-height: 100vh;
+    background: none;
+    overflow: hidden;
+  }
+
   .auth-container-login .auth-left-login {
-    min-height: 30vh;
-    background-position: center 22%;
+    position: absolute;
+    inset: 0;
+    min-height: 100vh;
+    width: 100%;
+    padding: 0;
+    background-position: center;
+  }
+
+  .auth-container-login .auth-left-content {
+    display: none;
+  }
+
+  .auth-container-login .auth-box {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    width: 100%;
+    padding: 1rem;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.22);
+    backdrop-filter: blur(1.5px);
   }
 
   .auth-container-login .auth-form-wrapper {
-    max-width: 100%;
-    background: #ffffff;
-    border-radius: 14px;
-    padding: 1rem;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    max-width: 420px;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    padding: 1.1rem;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.24);
   }
 
   .auth-container-login .form-header {

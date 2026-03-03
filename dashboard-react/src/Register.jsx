@@ -9,6 +9,7 @@ function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [secretCode, setSecretCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
@@ -37,7 +38,7 @@ function Register() {
       const res = await fetch(API_ENDPOINTS.AUTH.REGISTER, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: name, email, password })
+        body: JSON.stringify({ username: name, email, password, secretCode })
       });
 
       const { data, rawText } = await readApiResponse(res);
@@ -139,6 +140,17 @@ function Register() {
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
+            <label htmlFor="register-secret-code">Secret Code</label>
+            <input
+              id="register-secret-code"
+              type="text"
+              name="secretCode"
+              autoComplete="off"
+              placeholder="Enter secret code"
+              value={secretCode}
+              onChange={(e) => setSecretCode(e.target.value)}
+              required
+            />
             <button type="submit" disabled={loading}>
               {loading ? "Registering..." : "Sign Up"}
             </button>

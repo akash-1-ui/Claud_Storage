@@ -2070,29 +2070,30 @@ td button:nth-child(7):hover {
 
   .mobile-sidebar-toggle {
     display: inline-flex;
-    width: 32px;
-    height: 32px;
-    min-width: 32px !important;
-    min-height: 32px !important;
-    border-radius: 8px;
-    border: 1px solid #d1d5db;
-    background: #ffffff;
+    width: 46px;
+    height: 46px;
+    min-width: 46px !important;
+    min-height: 46px !important;
+    border-radius: 0;
+    border: none;
+    background: transparent;
     align-items: center;
     justify-content: center;
-    padding: 4px;
+    padding: 0;
     cursor: pointer;
     flex-shrink: 0;
+    box-shadow: none;
   }
 
   .mobile-sidebar-toggle img {
-    width: 100%;
-    height: 100%;
+    width: 44px;
+    height: 44px;
     object-fit: contain;
   }
 
   .main-content.dark .mobile-sidebar-toggle {
-    background: #2a2a33;
-    border-color: #3a3a47;
+    background: transparent;
+    border: none;
   }
 
   .search-bar {
@@ -2104,22 +2105,22 @@ td button:nth-child(7):hover {
     flex-wrap: nowrap;
     flex-direction: row;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
   }
 
   .search-controls-stack {
-    gap: 5px;
+    gap: 8px;
   }
 
   .search-bar input {
     width: auto !important;
-    flex: 1 1 auto;
-    min-width: 64px;
-    min-height: 30px !important;
-    font-size: 12px;
-    padding: 5px 8px;
+    flex: 1 1 220px;
+    min-width: 170px;
+    min-height: 42px !important;
+    font-size: 14px;
+    padding: 9px 12px;
     border: 1px solid #d6dbe4;
-    border-radius: 6px;
+    border-radius: 10px;
   }
 
   .header-filter {
@@ -2349,18 +2350,24 @@ td button:nth-child(7):hover {
   }
 
   .mobile-sidebar-toggle {
-    width: 28px;
-    height: 28px;
-    min-width: 28px !important;
-    min-height: 28px !important;
-    padding: 3px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px !important;
+    min-height: 42px !important;
+    padding: 0;
+  }
+
+  .mobile-sidebar-toggle img {
+    width: 40px;
+    height: 40px;
   }
 
   .search-bar input {
-    min-width: 52px;
-    padding: 4px 6px !important;
-    border-radius: 6px;
-    font-size: 11px;
+    min-width: 140px;
+    min-height: 40px !important;
+    padding: 8px 11px !important;
+    border-radius: 10px;
+    font-size: 13px;
   }
 
   .header-filter {
@@ -2456,17 +2463,23 @@ td button:nth-child(7):hover {
   }
 
   .mobile-sidebar-toggle {
-    width: 26px;
-    height: 26px;
-    min-width: 26px !important;
-    min-height: 26px !important;
-    padding: 3px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px !important;
+    min-height: 38px !important;
+    padding: 0;
+  }
+
+  .mobile-sidebar-toggle img {
+    width: 36px;
+    height: 36px;
   }
 
   .search-bar input {
-    min-width: 44px;
-    padding: 3px 5px !important;
-    font-size: 10px;
+    min-width: 120px;
+    min-height: 38px !important;
+    padding: 7px 10px !important;
+    font-size: 12px;
   }
 
   .header-filter select {

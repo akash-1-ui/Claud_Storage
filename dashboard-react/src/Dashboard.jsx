@@ -1308,6 +1308,10 @@ useEffect(() => {
   };
 
   const openFilePicker = () => {
+    if (activeSection !== 'files') {
+      setActiveSection('files');
+    }
+
     const picker = filePickerRef.current;
     if (picker) {
       picker.value = "";
@@ -1393,7 +1397,7 @@ useEffect(() => {
         <nav>
           <ul>
             <li className={activeSection === 'files' ? 'active' : ''} onClick={() => handleSectionChange('files')}>
-              Home
+              My Files
             </li>
             <li className={activeSection === 'favorites' ? 'active' : ''} onClick={() => handleSectionChange('favorites')}>Favorites</li>
             <li className={activeSection === 'trash' ? 'active' : ''} onClick={() => handleSectionChange('trash')}>Trash</li>
@@ -1995,7 +1999,7 @@ useEffect(() => {
           <section className={`files${isDarkMode ? ' dark' : ''}`}>
             {/* Breadcrumb Navigation */}
             <div className="breadcrumb">
-              <span>Home</span>
+              <span>My Files</span>
             </div>
 
             <div className="files-header">

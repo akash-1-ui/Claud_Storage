@@ -238,17 +238,33 @@ const verifyGoogleCredential = async (credential) => {
 };
 
 exports.register = async (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, email, password, secretCode } = req.body;
 
-  if (!username || !email || !password) {
+  if (!username || !email || !password || !secretCode) {
     return res.status(400).json({
       success: false,
-      message: "username, email and password are required"
+      message: "username, email, password and secret code are required"
     });
   }
 
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedUsername = username.trim();
+  const normalizedSecretCode = secretCode.trim();
+  const registrationSecretCode = (process.env.REGISTRATION_SECRET_CODE || "").trim();
+
+  if (!registrationSecretCode) {
+    return res.status(500).json({
+      success: false,
+      message: "Registration secret code is not configured"
+    });
+  }
+
+  if (normalizedSecretCode !== registrationSecretCode) {
+    return res.status(403).json({
+      success: false,
+      message: "Invalid secret code"
+    });
+  }
 
   try {
     const userExists = await User.findOne({ email: normalizedEmail }).lean();
