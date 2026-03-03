@@ -38,7 +38,7 @@ function Register() {
       const res = await fetch(API_ENDPOINTS.AUTH.REGISTER, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: name, email, password, secretCode })
+        body: JSON.stringify({ username: name, email, password, secretCode }),
       });
 
       const { data, rawText } = await readApiResponse(res);
@@ -90,6 +90,7 @@ function Register() {
               onChange={(e) => setName(e.target.value)}
               required
             />
+
             <label htmlFor="register-email">Email</label>
             <input
               id="register-email"
@@ -101,8 +102,9 @@ function Register() {
               onChange={(e) => setEmail(e.target.value)}
               required
             />
+
             <label htmlFor="register-password">Password</label>
-            <div style={{ position: "relative", display: "flex", alignItems: "center", width: "100%" }}>
+            <div className="auth-password-field">
               <input
                 id="register-password"
                 type={showPassword ? "text" : "password"}
@@ -111,35 +113,19 @@ function Register() {
                 placeholder="Create a password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={{ paddingRight: "72px", width: "100%", boxSizing: "border-box", height: "44px" }}
+                className="auth-password-input"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: "absolute",
-                  right: "8px",
-                  top: "17%",
-                  transform: "translateY(-50%)",
-                  background: "none",
-                  border: "none",
-                  outline: "none",
-                  cursor: "pointer",
-                  fontSize: "12px",
-                  padding: "4px 8px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  boxShadow: "none",
-                  color: "#2563eb",
-                  fontWeight: 600
-                }}
+                className="auth-password-toggle"
                 title={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
+
             <label htmlFor="register-secret-code">Secret Code</label>
             <input
               id="register-secret-code"
@@ -151,6 +137,7 @@ function Register() {
               onChange={(e) => setSecretCode(e.target.value)}
               required
             />
+
             <button type="submit" disabled={loading}>
               {loading ? "Registering..." : "Sign Up"}
             </button>

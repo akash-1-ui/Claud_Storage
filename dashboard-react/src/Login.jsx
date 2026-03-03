@@ -64,7 +64,9 @@ function Login() {
     <div className="auth-container auth-container-login">
       <div className="auth-left auth-left-login">
         <div className="auth-left-content">
-          <h1>Welcome Back to <span className="highlight">CloudBox</span></h1>
+          <h1>
+            Welcome Back to <span className="highlight">CloudBox</span>
+          </h1>
         </div>
       </div>
 
@@ -85,43 +87,30 @@ function Login() {
               onChange={(e) => setEmail(e.target.value)}
               required
             />
+
             <label htmlFor="login-password">Password</label>
-            <div style={{position: 'relative', display: 'flex', alignItems: 'center', width: '100%'}}>
+            <div className="auth-password-field">
               <input
                 id="login-password"
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? "text" : "password"}
                 name="password"
                 autoComplete="current-password"
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={{paddingRight: '40px', width: '100%', boxSizing: 'border-box', height: '44px'}}
+                className="auth-password-input"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '10px',
-                  top: '17%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  outline: 'none',
-                  cursor: 'pointer',
-                  fontSize: '20px',
-                  padding: '4px 8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: 'none'
-                }}
-                title={showPassword ? 'Hide password' : 'Show password'}
+                className="auth-password-toggle"
+                title={showPassword ? "Hide password" : "Show password"}
               >
-                {showPassword ? '👁️' : '👁️‍🗨️'}
+                {showPassword ? "Hide" : "Show"}
               </button>
             </div>
+
             <button type="submit" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </button>
@@ -145,4 +134,3 @@ function Login() {
 }
 
 export default Login;
-

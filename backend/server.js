@@ -2,11 +2,15 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const mongoose = require("mongoose");
-require("dotenv").config();
+require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 
 console.log("Starting server...");
 console.log("PORT:", process.env.PORT);
 console.log("MONGO_URI:", process.env.MONGO_URI ? "Set" : "Not set");
+console.log(
+  "REGISTRATION_SECRET_CODE:",
+  process.env.REGISTRATION_SECRET_CODE ? "Set" : "Not set"
+);
 
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
