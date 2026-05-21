@@ -10,6 +10,7 @@ function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const navigate = useNavigate();
   const { startAuthTransition } = useAuthTransition();
 
@@ -30,6 +31,7 @@ function Login() {
     e.preventDefault();
     if (loading) return;
 
+    setErrorMessage("");
     setLoading(true);
 
     try {
@@ -50,11 +52,11 @@ function Login() {
           rawText,
           "Invalid credentials"
         );
-        alert("Login failed: " + errorMessage);
+        setErrorMessage(errorMessage);
         setLoading(false);
       }
     } catch (err) {
-      alert("Server error. Please try again.");
+      setErrorMessage("Server error. Please try again.");
       console.error(err);
       setLoading(false);
     }
@@ -76,13 +78,13 @@ function Login() {
             <h2>Sign In</h2>
           </div>
           <form onSubmit={handleSubmit}>
-            <label htmlFor="login-email">Email</label>
+            <label htmlFor="login-email">Email or Username</label>
             <input
               id="login-email"
-              type="email"
+              type="text"
               name="email"
-              autoComplete="email"
-              placeholder="Enter your email"
+              autoComplete="username"
+              placeholder="Enter your email or username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -114,6 +116,11 @@ function Login() {
             <button type="submit" disabled={loading}>
               {loading ? "Signing in..." : "Sign In"}
             </button>
+            {errorMessage && (
+              <div className="auth-error-message" role="alert">
+                {errorMessage}
+              </div>
+            )}
           </form>
           <p>
             Don't have an account?{" "}

@@ -324,6 +324,16 @@ exports.register = async (req, res) => {
   }
 };
 
+const findUserByLoginIdentifier = async (loginIdentifier) => {
+  const normalized = loginIdentifier.trim().toLowerCase();
+
+  if (normalized.includes("@")) {
+    return User.findOne({ email: normalized });
+  }
+
+  return User.findOne({ username: normalized });
+};
+
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -331,13 +341,11 @@ exports.login = async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: "email and password are required"
+        message: "Email/username and password are required"
       });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await findUserByLoginIdentifier(email);
     if (!user) {
       return res.status(401).json({
         success: false,

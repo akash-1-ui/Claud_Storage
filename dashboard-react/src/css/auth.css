@@ -61,7 +61,8 @@ body.auth-page {
 }
 
 .auth-left-login {
-  background: url('../assets/akasham.jpg') center/cover no-repeat;
+  background: url('../assets/akasham.jpg') center/contain no-repeat;
+  background-color: #0f172a;
 }
 
 .auth-left-register {
@@ -332,15 +333,30 @@ body.auth-page {
 .auth-form-wrapper p {
   text-align: center;
   margin-top: 1.5rem;
-  color: #666;
+  color: #374151;
   font-size: 0.95rem;
 }
 
 .auth-form-wrapper a {
-  color: #2196f3;
+  color: #1d4ed8;
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
   transition: color 0.3s ease;
+}
+
+.auth-form-wrapper a:hover {
+  color: #0f172a;
+}
+
+.auth-error-message {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
+  background: rgba(248, 113, 113, 0.12);
+  color: #b91c1c;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  font-size: 0.95rem;
+  line-height: 1.4;
 }
 
 .auth-form-wrapper a:hover {
