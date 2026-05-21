@@ -326,12 +326,13 @@ exports.register = async (req, res) => {
 
 const findUserByLoginIdentifier = async (loginIdentifier) => {
   const normalized = loginIdentifier.trim().toLowerCase();
-
   if (normalized.includes("@")) {
     return User.findOne({ email: normalized });
   }
 
-  return User.findOne({ username: normalized });
+  // Username stored in DB may contain mixed case. Use case-insensitive match.
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return User.findOne({ username: { $regex: `^${escaped}$`, $options: "i" } });
 };
 
 exports.login = async (req, res) => {

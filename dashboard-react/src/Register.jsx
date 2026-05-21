@@ -12,6 +12,7 @@ function Register() {
   const [secretCode, setSecretCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const navigate = useNavigate();
   const { startAuthTransition } = useAuthTransition();
 
@@ -32,6 +33,7 @@ function Register() {
     e.preventDefault();
     if (loading) return;
 
+    setErrorMessage("");
     setLoading(true);
 
     try {
@@ -52,11 +54,11 @@ function Register() {
           rawText,
           "Please try again"
         );
-        alert("Registration failed: " + errorMessage);
+        setErrorMessage(errorMessage);
         setLoading(false);
       }
     } catch (err) {
-      alert("Server error. Please try again.");
+      setErrorMessage("Server error. Please try again.");
       console.error(err);
       setLoading(false);
     }
@@ -141,6 +143,11 @@ function Register() {
             <button type="submit" disabled={loading}>
               {loading ? "Registering..." : "Sign Up"}
             </button>
+            {errorMessage && (
+              <div className="auth-error-message" role="alert">
+                {errorMessage}
+              </div>
+            )}
           </form>
           <p>
             Already Signed up?{" "}

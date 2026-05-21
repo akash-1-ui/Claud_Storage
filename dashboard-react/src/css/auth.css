@@ -61,8 +61,9 @@ body.auth-page {
 }
 
 .auth-left-login {
-  background: url('../assets/akasham.jpg') center/contain no-repeat;
+  background: url('../assets/akasham.jpg') top center/cover no-repeat;
   background-color: #0f172a;
+  background-attachment: scroll;
 }
 
 .auth-left-register {
