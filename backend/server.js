@@ -7,6 +7,12 @@ require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 console.log("Starting server...");
 console.log("PORT:", process.env.PORT);
 console.log("MONGO_URI:", process.env.MONGO_URI ? "Set" : "Not set");
+if (process.env.MONGO_URI) {
+  const mongoHost = process.env.MONGO_URI.includes("@")
+    ? process.env.MONGO_URI.split("@")[1].split("/")[0]
+    : process.env.MONGO_URI.split("/")[2] || process.env.MONGO_URI;
+  console.log("MONGO_URI host:", mongoHost);
+}
 console.log(
   "REGISTRATION_SECRET_CODE:",
   process.env.REGISTRATION_SECRET_CODE ? "Set" : "Not set"

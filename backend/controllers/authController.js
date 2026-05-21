@@ -275,6 +275,17 @@ exports.register = async (req, res) => {
       });
     }
 
+    // Check cluster availability
+    const availableClusters = await Cluster.find({ $expr: { $lt: ["$currentUsers", "$maxUsers"] } });
+    console.log("[REGISTER] Available clusters:", availableClusters.length);
+    if (availableClusters.length === 0) {
+      console.warn("[REGISTER] No available cluster capacity - all clusters are full");
+      return res.status(503).json({
+        success: false,
+        message: "No available storage capacity. Please try again later."
+      });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const createdUserResult = await createUserWithAvailableCluster({
       username: normalizedUsername,
@@ -290,6 +301,7 @@ exports.register = async (req, res) => {
     }
 
     const user = createdUserResult.user;
+    console.log("[REGISTER] User created successfully:", user.email);
 
     return res.status(201).json({
       success: true,
@@ -304,10 +316,10 @@ exports.register = async (req, res) => {
       });
     }
 
-    console.error("register error:", error);
+    console.error("[REGISTER] Error:", error.message, error.stack);
     return res.status(500).json({
       success: false,
-      message: "Server error"
+      message: "Server error: " + (error.message || "Unknown error")
     });
   }
 };

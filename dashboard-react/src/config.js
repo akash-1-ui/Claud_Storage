@@ -1,10 +1,32 @@
-const DEFAULT_API_BASE_URL = "https://claud-storage.onrender.com";
-const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL)
-  .trim()
-  .replace(/\/+$/, "");
+const DEFAULT_PRODUCTION_API_BASE_URL = "https://claud-storage.onrender.com";
+
+const isLocalHostname = (hostname) =>
+  hostname === "localhost" ||
+  hostname === "127.0.0.1" ||
+  hostname === "0.0.0.0" ||
+  hostname.endsWith(".local") ||
+  /^10(?:\.\d{1,3}){3}$/.test(hostname) ||
+  /^192\.168(?:\.\d{1,3}){2}$/.test(hostname) ||
+  /^172\.(1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2}$/.test(hostname);
+
+const getApiBaseUrl = () => {
+  const envApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (envApiBaseUrl) {
+    return envApiBaseUrl;
+  }
+
+  if (typeof window !== "undefined") {
+    const runtimeHostname = (window.location.hostname || "").trim().toLowerCase();
+    if (import.meta.env.DEV || isLocalHostname(runtimeHostname)) {
+      return "";
+    }
+  }
+
+  return DEFAULT_PRODUCTION_API_BASE_URL;
+};
 
 // Set VITE_API_BASE_URL in Vercel if backend URL changes.
-export const API_BASE_URL = configuredApiBaseUrl;
+export const API_BASE_URL = getApiBaseUrl();
 
 // Cloudinary Configuration for direct uploads (no backend needed)
 export const CLOUDINARY_CONFIG = {
@@ -13,7 +35,7 @@ export const CLOUDINARY_CONFIG = {
   API_URL: "https://api.cloudinary.com/v1_1/dzgccprpv/image/upload",
 };
 
-const buildApiUrl = (path) => `${API_BASE_URL}${path}`;
+const buildApiUrl = (path) => (API_BASE_URL ? `${API_BASE_URL}${path}` : path);
 
 // API endpoints
 export const API_ENDPOINTS = {
